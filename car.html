@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>하진 씽씽 레이싱</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1b1f2a; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas { width: min(100vw, calc(100vh * 360 / 640)); width: min(100vw, calc(100dvh * 360 / 640)); height: auto; aspect-ratio: 360 / 640; background: #6b7280; display: block; }
+  .home { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 8px; z-index: 6; padding: 6px 12px; border-radius: 16px; background: rgba(0,0,0,.45); color: #fff; font: bold 13px sans-serif; text-decoration: none; }
+</style>
+</head>
+<body>
+<a class="home" href="index.html">🏠 게임 선택</a>
+<div id="wrap"><canvas id="game" width="720" height="1280"></canvas></div>
+
+<script src="kid.js"></script>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = 360, H = 640;
+  const ROAD_L = 45, ROAD_R = 315, LANES = [90, 180, 270];
+  const PLAYER_Y = 530;
+  ctx.scale(canvas.width / W, canvas.height / H);
+
+  // ---------- 소리 ----------
+  let actx = null;
+  function initAudio() {
+    if (actx) return;
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
+  }
+  function beep(freq, dur, type = 'square', vol = 0.08, slide = 0) {
+    if (!actx) return;
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t); o.stop(t + dur);
+  }
+  const sfx = {
+    move: () => beep(520, 0.06, 'triangle', 0.06, 200),
+    star: () => { beep(988, 0.07); setTimeout(() => beep(1319, 0.15), 60); },
+    power: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.1), i * 70)),
+    crash: () => beep(180, 0.35, 'sawtooth', 0.12, -120),
+    smash: () => beep(300, 0.15, 'square', 0.08, -150),
+    over: () => [494, 440, 370, 294, 220].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle', 0.12), i * 130))
+  };
+
+  // ---------- 상태 ----------
+  let state = 'title', frame = 0, stateTimer = 0;
+  let dist = 0, stars = 0, lives = 3, speed = 4, nextSpawn = 0, scroll = 0;
+  let objects = [], popups = [];
+  let best = +(localStorage.getItem('hajinCarBest') || 0);
+  const player = { lane: 1, x: LANES[1], invuln: 0, shield: 0, tilt: 0 };
+  const score = () => Math.floor(dist / 10) + stars * 10;
+
+  function newGame() {
+    dist = 0; stars = 0; lives = 3; speed = 4; nextSpawn = 200; objects = []; popups = [];
+    Object.assign(player, { lane: 1, x: LANES[1], invuln: 0, shield: 0, tilt: 0 });
+    state = 'play';
+  }
+
+  // ---------- 입력 ----------
+  function steer(dir) {
+    initAudio();
+    if (state !== 'play') {
+      if (state === 'title' || stateTimer > 50) newGame();
+      return;
+    }
+    const lane = Math.max(0, Math.min(2, player.lane + dir));
+    if (lane !== player.lane) { player.lane = lane; player.tilt = dir; sfx.move(); }
+  }
+  addEventListener('keydown', e => {
+    if (e.repeat) return;
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') { steer(-1); e.preventDefault(); }
+    else if (e.code === 'ArrowRight' || e.code === 'KeyD') { steer(1); e.preventDefault(); }
+    else if (e.code === 'Enter' || e.code === 'Space') { steer(0); e.preventDefault(); }
+  });
+  // 화면 왼쪽 절반을 누르면 왼쪽, 오른쪽 절반을 누르면 오른쪽으로 한 칸
+  addEventListener('pointerdown', e => {
+    if (e.target.closest && e.target.closest('a')) return;
+    const r = canvas.getBoundingClientRect();
+    steer(e.clientX < r.left + r.width / 2 ? -1 : 1);
+  });
+  document.addEventListener('touchstart', e => { if (!(e.target.closest && e.target.closest('a'))) e.preventDefault(); }, { passive: false });
+  document.addEventListener('contextmenu', e => e.preventDefault());
+
+  // ---------- 장애물·아이템 ----------
+  const OBSTACLES = ['cone', 'rock', 'car', 'barrier'];
+  function spawnRow() {
+    const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
+    // 한 줄에 최대 2개만 막아서 항상 지나갈 길이 하나는 남는다
+    const n = dist > 1500 && Math.random() < 0.45 ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      objects.push({ kind: 'obs', type: OBSTACLES[Math.floor(Math.random() * OBSTACLES.length)], x: LANES[lanes[i]], y: -60, color: ['#3b82f6', '#22a35a', '#f59e0b', '#a855f7'][Math.floor(Math.random() * 4)] });
+    }
+    if (Math.random() < 0.65) {
+      const r = Math.random();
+      const type = r < 0.1 && lives < 3 ? 'heart' : r < 0.22 ? 'shield' : 'star';
+      objects.push({ kind: 'item', type, x: LANES[lanes[2]], y: -60 });
+    }
+  }
+
+  function update() {
+    frame++;
+    if (state !== 'play') { stateTimer++; scroll += 1.5; return; }
+
+    speed = 4 + Math.min(dist / 2500, 6);
+    dist += speed; scroll += speed;
+    const p = player;
+    p.x += (LANES[p.lane] - p.x) * 0.25;
+    p.tilt *= 0.85;
+    if (p.invuln > 0) p.invuln--;
+    if (p.shield > 0) p.shield--;
+
+    nextSpawn -= speed;
+    if (nextSpawn <= 0) { spawnRow(); nextSpawn = Math.max(190, 300 - dist / 150) + Math.random() * 70; }
+
+    for (const o of objects) {
+      o.y += speed;
+      if (o.dead || Math.abs(o.x - p.x) > 34 || Math.abs(o.y - PLAYER_Y) > 44) continue;
+      if (o.kind === 'item') {
+        o.dead = true;
+        if (o.type === 'star') { stars++; sfx.star(); popups.push({ x: o.x, y: o.y, text: '+10', life: 40 }); }
+        else if (o.type === 'heart') { lives = Math.min(3, lives + 1); sfx.power(); popups.push({ x: o.x, y: o.y, text: '❤️+1', life: 50 }); }
+        else { p.shield = 360; sfx.power(); popups.push({ x: o.x, y: o.y, text: '무적!', life: 50 }); }
+      } else if (p.shield > 0) {
+        o.dead = true; stars++; sfx.smash(); popups.push({ x: o.x, y: o.y, text: '쾅! +10', life: 40 });
+      } else if (p.invuln === 0) {
+        o.dead = true; lives--; p.invuln = 100; sfx.crash();
+        if (lives <= 0) {
+          state = 'over'; stateTimer = 0; sfx.over();
+          if (score() > best) { best = score(); localStorage.setItem('hajinCarBest', best); }
+        }
+      }
+    }
+    objects = objects.filter(o => !o.dead && o.y < H + 80);
+    for (const pp of popups) { pp.y -= 1; pp.life--; }
+    popups = popups.filter(pp => pp.life > 0);
+  }
+
+  // ---------- 그리기 ----------
+  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); }
+  function ell(x, y, rx, ry) { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); }
+  function text(str, x, y, size, color = '#fff', align = 'center') {
+    ctx.font = `900 ${size}px "Malgun Gothic", "Apple SD Gothic Neo", sans-serif`;
+    ctx.textAlign = align; ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(3, size / 6); ctx.strokeStyle = '#23304a';
+    ctx.strokeText(str, x, y); ctx.fillStyle = color; ctx.fillText(str, x, y);
+  }
+
+  // 위에서 내려다본 자동차. driver가 true면 하진의 머리가 보인다.
+  function drawCar(x, y, color, driver, tilt = 0) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(tilt * 0.18);
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; rr(-19, -30, 42, 66, 10);
+    ctx.fillStyle = '#20242e';
+    rr(-23, -24, 7, 16, 3); rr(16, -24, 7, 16, 3); rr(-23, 12, 7, 16, 3); rr(16, 12, 7, 16, 3);
+    ctx.fillStyle = color; rr(-19, -34, 38, 68, 11);
+    ctx.fillStyle = 'rgba(255,255,255,.25)'; rr(-15, -31, 30, 9, 5);
+    ctx.fillStyle = '#bfe6ff'; rr(-14, -18, 28, 13, 5);
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; rr(-14, -3, 28, 24, 6);
+    ctx.fillStyle = '#fff3a0'; rr(-16, -34, 9, 4, 2); rr(7, -34, 9, 4, 2);
+    ctx.fillStyle = '#ff6b6b'; rr(-16, 30, 9, 4, 2); rr(7, 30, 9, 4, 2);
+    if (driver) {
+      ctx.fillStyle = '#ffdcc2'; ell(-10.5, 8, 3, 3.5); ell(10.5, 8, 3, 3.5); ell(0, 3, 6, 5);
+      ctx.fillStyle = '#1d1714'; ell(0, 8, 10, 9.5);
+      ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(-1, -5); ctx.lineTo(1, -0.5); ctx.lineTo(3.5, -4); ctx.lineTo(5, 0.5); ctx.fill();
+      ctx.fillStyle = '#ffd23f'; ell(0, -27, 3, 3);
+    }
+    ctx.restore();
+  }
+
+  function drawObject(o) {
+    const { x, y } = o;
+    switch (o.type) {
+      case 'cone':
+        ctx.fillStyle = 'rgba(0,0,0,.2)'; ell(x, y + 16, 20, 7);
+        ctx.fillStyle = '#e8590c'; rr(x - 18, y + 8, 36, 9, 3);
+        ctx.fillStyle = '#ff7b24'; ctx.beginPath(); ctx.moveTo(x, y - 24); ctx.lineTo(x + 13, y + 10); ctx.lineTo(x - 13, y + 10); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x - 5.5, y - 9); ctx.lineTo(x + 5.5, y - 9); ctx.lineTo(x + 8, y - 2); ctx.lineTo(x - 8, y - 2); ctx.fill();
+        break;
+      case 'rock':
+        ctx.fillStyle = 'rgba(0,0,0,.2)'; ell(x + 2, y + 14, 24, 8);
+        ctx.fillStyle = '#7c8591'; ell(x, y, 23, 18);
+        ctx.fillStyle = '#9aa3ad'; ell(x - 5, y - 5, 13, 9);
+        ctx.fillStyle = '#5f6873'; ell(x + 9, y + 6, 5, 3);
+        break;
+      case 'barrier':
+        ctx.fillStyle = 'rgba(0,0,0,.2)'; rr(x - 28, y + 6, 58, 12, 4);
+        ctx.fillStyle = '#f4f5f7'; rr(x - 30, y - 10, 60, 18, 4);
+        ctx.fillStyle = '#e23b3b';
+        for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(x - 26 + i * 15, y - 10); ctx.lineTo(x - 18 + i * 15, y - 10); ctx.lineTo(x - 24 + i * 15, y + 8); ctx.lineTo(x - 32 + i * 15 + 2, y + 8); ctx.fill(); }
+        ctx.fillStyle = '#5a5f6b'; ctx.fillRect(x - 24, y + 8, 5, 8); ctx.fillRect(x + 19, y + 8, 5, 8);
+        break;
+      case 'car':
+        drawCar(x, y, o.color, false);
+        break;
+      case 'star': {
+        const s = 1 + Math.sin(frame * 0.15) * 0.1;
+        ctx.fillStyle = 'rgba(255,230,120,.35)'; ell(x, y, 22 * s, 22 * s);
+        ctx.fillStyle = '#ffd23f'; ctx.beginPath();
+        for (let i = 0; i < 10; i++) { const r = (i % 2 ? 7 : 16) * s, a = -Math.PI / 2 + i * Math.PI / 5; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+        ctx.fill();
+        ctx.fillStyle = '#fff6c8'; ell(x - 3, y - 3, 3, 3);
+        break;
+      }
+      case 'heart':
+        ctx.fillStyle = 'rgba(255,150,170,.35)'; ell(x, y, 22, 22);
+        ctx.font = '28px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('❤️', x, y + 10);
+        break;
+      case 'shield':
+        ctx.fillStyle = 'rgba(120,200,255,.4)'; ell(x, y, 22, 22);
+        ctx.strokeStyle = '#3fa0e0'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 18, 0, Math.PI * 2); ctx.stroke();
+        ctx.font = '22px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⚡', x, y + 8);
+        break;
+    }
+  }
+
+  function drawRoad() {
+    ctx.fillStyle = '#6fcf5f'; ctx.fillRect(0, 0, W, H);
+    // 길가 나무와 꽃
+    for (let i = 0; i < 9; i++) {
+      const y = ((i * 90 + scroll) % 810) - 80;
+      const lx = 20 + (i % 2) * 6, rx = W - 20 - ((i + 1) % 2) * 6;
+      for (const x of [lx, rx]) {
+        ctx.fillStyle = '#3f9a45'; ell(x, y, 16, 16);
+        ctx.fillStyle = '#58b85a'; ell(x - 3, y - 4, 9, 9);
+      }
+      ctx.fillStyle = i % 2 ? '#ffd1dc' : '#fff'; ell(lx + 4, y + 45, 3, 3); ell(rx - 4, y + 45, 3, 3);
+    }
+    ctx.fillStyle = '#59606c'; ctx.fillRect(ROAD_L, 0, ROAD_R - ROAD_L, H);
+    // 빨강·하양 연석
+    for (let i = 0; i < 18; i++) {
+      const y = ((i * 40 + scroll) % 720) - 40;
+      ctx.fillStyle = i % 2 ? '#e23b3b' : '#f4f5f7';
+      ctx.fillRect(ROAD_L - 7, y, 7, 40); ctx.fillRect(ROAD_R, y, 7, 40);
+    }
+    // 차선
+    ctx.fillStyle = '#f4f5f7';
+    for (let i = 0; i < 10; i++) {
+      const y = ((i * 72 + scroll) % 720) - 50;
+      ctx.fillRect(133, y, 4, 36); ctx.fillRect(223, y, 4, 36);
+    }
+  }
+
+  function draw() {
+    drawRoad();
+    if (state === 'title') {
+      drawCar(LANES[1], 500 + Math.sin(frame * 0.2) * 2, '#e23b3b', true);
+      ctx.fillStyle = 'rgba(35,48,74,.55)'; rr(20, 70, W - 40, 250, 24);
+      text('하진', W / 2, 122, 40, '#ffd23f');
+      text('씽씽 레이싱', W / 2, 168, 40, '#ffd23f');
+      drawKid(ctx, W / 2, 268, 1.9, 1, frame, false, true);
+      if (Math.floor(frame / 30) % 2) text('화면을 눌러 시작!', W / 2, 304, 20);
+      text('◀ 왼쪽 누르면 왼쪽', W / 2, 372, 17);
+      text('오른쪽 누르면 오른쪽 ▶', W / 2, 400, 17);
+      text('최고 점수 ' + best, W / 2, 612, 16, '#ffe36b');
+      return;
+    }
+
+    objects.forEach(drawObject);
+    const p = player;
+    if (!(p.invuln > 0 && Math.floor(frame / 4) % 2)) {
+      drawCar(p.x, PLAYER_Y, '#e23b3b', true, p.tilt);
+      if (p.shield > 0 && (p.shield > 90 || Math.floor(frame / 6) % 2)) {
+        ctx.fillStyle = 'rgba(120,200,255,.3)'; ell(p.x, PLAYER_Y, 36, 46);
+        ctx.strokeStyle = '#3fa0e0'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(p.x, PLAYER_Y, 36, 46, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    popups.forEach(pp => text(pp.text, pp.x, pp.y, 18, '#ffe36b'));
+
+    text('점수 ' + score(), W / 2, 34, 22);
+    text('⭐ ' + stars, W / 2, 58, 15, '#ffe36b');
+    text('❤️'.repeat(Math.max(0, lives)), W - 12, 34, 18, '#fff', 'right');
+
+    if (state === 'over') {
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
+      text('게임 오버', W / 2, 240, 44, '#ff8a80');
+      text('점수 ' + score(), W / 2, 296, 28);
+      text('최고 점수 ' + best, W / 2, 332, 20, '#ffe36b');
+      if (stateTimer > 50 && Math.floor(frame / 30) % 2) text('화면을 눌러 다시 도전!', W / 2, 390, 20);
+    }
+  }
+
+  // ---------- 루프 ----------
+  let last = performance.now(), acc = 0;
+  function loop(now) {
+    acc += Math.min(100, now - last); last = now;
+    while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

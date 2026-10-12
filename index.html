@@ -46,6 +46,11 @@
       <h2>하진 셈셈 히어로</h2>
       <span>두 자리 수 덧셈·뺄셈 문제를 풀어 별을 모으자!</span>
     </a>
+    <a class="card" href="car.html">
+      <canvas id="c4" width="640" height="360"></canvas>
+      <h2>하진 씽씽 레이싱</h2>
+      <span>장애물을 피하고 별을 먹으며 씽씽 달리자!</span>
+    </a>
   </div>
 
 <script src="kid.js"></script>
@@ -53,6 +58,7 @@
   const a = document.getElementById('c1').getContext('2d');
   const b = document.getElementById('c2').getContext('2d');
   const m = document.getElementById('c3').getContext('2d');
+  const r = document.getElementById('c4').getContext('2d');
   let f = 0;
   function frame() {
     f++;
@@ -97,6 +103,28 @@
     m.beginPath(); m.roundRect(290, 70, 310, 130, 28); m.fill(); m.stroke();
     m.fillStyle = '#23304a'; m.font = '900 64px "Malgun Gothic", sans-serif'; m.textAlign = 'center';
     m.fillText(Math.floor(f / 150) % 2 ? '52 − 21' : '27 + 45', 445, 158);
+    // 레이싱 카드: 옆으로 달리는 빨간 자동차를 탄 하진
+    g = r.createLinearGradient(0, 0, 0, 360);
+    g.addColorStop(0, '#6ec3ff'); g.addColorStop(1, '#d8f1ff');
+    r.fillStyle = g; r.fillRect(0, 0, 640, 360);
+    r.fillStyle = '#6fcf5f'; r.fillRect(0, 230, 640, 130);
+    r.fillStyle = '#59606c'; r.fillRect(0, 262, 640, 70);
+    r.fillStyle = '#f4f5f7';
+    for (let i = 0; i < 6; i++) r.fillRect(((i * 130 - f * 6) % 780 + 780) % 780 - 70, 293, 70, 8);
+    const sx = ((640 - f * 6) % 900 + 900) % 900 - 60;
+    r.fillStyle = '#ffd23f'; r.beginPath();
+    for (let i = 0; i < 10; i++) { const q = i % 2 ? 11 : 26, an = -Math.PI / 2 + i * Math.PI / 5; r.lineTo(sx + Math.cos(an) * q, 150 + Math.sin(an) * q); }
+    r.fill();
+    const cy = 250 + Math.sin(f * 0.4) * 2;
+    drawKid(r, 300, cy + 12, 3.2, 1, 0, false, false);
+    r.fillStyle = '#e23b3b'; r.beginPath(); r.roundRect(190, cy - 40, 260, 70, 26); r.fill();
+    r.beginPath(); r.roundRect(215, cy - 62, 60, 40, 14); r.fill();
+    r.fillStyle = '#ffd23f'; r.fillRect(190, cy - 8, 260, 10);
+    r.fillStyle = '#fff3a0'; r.beginPath(); r.ellipse(444, cy - 16, 8, 10, 0, 0, 7); r.fill();
+    for (const wx of [245, 400]) {
+      r.fillStyle = '#20242e'; r.beginPath(); r.arc(wx, cy + 30, 28, 0, 7); r.fill();
+      r.fillStyle = '#c5cbd1'; r.beginPath(); r.arc(wx, cy + 30, 12, 0, 7); r.fill();
+    }
     requestAnimationFrame(frame);
   }
   frame();
