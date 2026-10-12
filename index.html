@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>하진 게임나라</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; padding: 32px 16px;
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    background: linear-gradient(#6ec3ff, #d8f1ff); color: #23304a;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+  }
+  h1 { margin: 0; font-size: clamp(32px, 7vw, 56px); color: #fff; text-shadow: 0 4px 0 #23304a, 0 0 12px rgba(35,48,74,.4); text-align: center; }
+  p { margin: 0; font-weight: bold; }
+  .games { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; width: 100%; max-width: 760px; }
+  .card {
+    flex: 1 1 280px; max-width: 360px; background: #fff; border-radius: 24px; border: 4px solid #23304a;
+    box-shadow: 0 8px 0 #23304a; text-decoration: none; color: inherit; overflow: hidden;
+    transition: transform .12s, box-shadow .12s;
+  }
+  .card:hover, .card:focus-visible { transform: translateY(-4px); box-shadow: 0 12px 0 #23304a; outline: none; }
+  .card:active { transform: translateY(4px); box-shadow: 0 4px 0 #23304a; }
+  .card canvas { display: block; width: 100%; height: auto; }
+  .card h2 { margin: 14px 16px 4px; font-size: 26px; }
+  .card span { display: block; margin: 0 16px 18px; color: #55617a; font-size: 15px; }
+</style>
+</head>
+<body>
+  <h1>🎮 하진 게임나라</h1>
+  <p>하고 싶은 게임을 골라요!</p>
+  <div class="games">
+    <a class="card" href="mario.html">
+      <canvas id="c1" width="640" height="360"></canvas>
+      <h2>하진 마리오</h2>
+      <span>달리고 점프해서 회전목마까지 가자!</span>
+    </a>
+    <a class="card" href="bubble.html">
+      <canvas id="c2" width="640" height="360"></canvas>
+      <h2>하진 버블버블</h2>
+      <span>방울을 쏴서 심술 로봇을 가두고 터뜨리자!</span>
+    </a>
+  </div>
+
+<script src="kid.js"></script>
+<script>
+  const a = document.getElementById('c1').getContext('2d');
+  const b = document.getElementById('c2').getContext('2d');
+  let f = 0;
+  function frame() {
+    f++;
+    // 마리오 카드: 풀밭을 달리는 하진
+    let g = a.createLinearGradient(0, 0, 0, 360);
+    g.addColorStop(0, '#6ec3ff'); g.addColorStop(1, '#d8f1ff');
+    a.fillStyle = g; a.fillRect(0, 0, 640, 360);
+    a.fillStyle = '#fff';
+    for (let i = 0; i < 3; i++) {
+      const x = ((i * 260 - f * 0.5) % 800 + 800) % 800 - 80;
+      a.beginPath(); a.ellipse(x, 70 + i * 30, 50, 20, 0, 0, 7); a.ellipse(x + 34, 58 + i * 30, 34, 20, 0, 0, 7); a.fill();
+    }
+    a.fillStyle = '#b5764a'; a.fillRect(0, 290, 640, 70);
+    a.fillStyle = '#58c452'; a.fillRect(0, 280, 640, 18);
+    for (let i = 0; i < 4; i++) {
+      const x = ((i * 190 - f * 3) % 760 + 760) % 760 - 60;
+      a.fillStyle = '#f6b700'; a.beginPath(); a.ellipse(x, 150, 14 * Math.abs(Math.cos(f * 0.08 + i)) + 3, 18, 0, 0, 7); a.fill();
+    }
+    drawKid(a, 320, 282 - Math.abs(Math.sin(f * 0.06)) * 60, 4, 1, f, Math.abs(Math.sin(f * 0.06)) > 0.15, true);
+
+    // 버블버블 카드: 방울 사이의 하진
+    g = b.createLinearGradient(0, 0, 0, 360);
+    g.addColorStop(0, '#fff6dd'); g.addColorStop(1, '#ffdcec');
+    b.fillStyle = g; b.fillRect(0, 0, 640, 360);
+    b.fillStyle = '#e86a8c'; b.fillRect(0, 300, 640, 60);
+    b.fillStyle = '#ff9db5'; b.fillRect(0, 300, 640, 40);
+    drawKid(b, 300, 300, 4, 1, f, false, false);
+    for (let i = 0; i < 9; i++) {
+      const x = (i * 83 + 40) % 640 + Math.sin(f * 0.03 + i) * 10;
+      const y = 380 - ((f * (0.7 + (i % 3) * 0.3) + i * 67) % 440), r = 20 + (i % 3) * 8;
+      b.fillStyle = 'rgba(140,220,255,.35)'; b.beginPath(); b.arc(x, y, r, 0, 7); b.fill();
+      b.strokeStyle = '#3fa0e0'; b.lineWidth = 3; b.stroke();
+      b.fillStyle = '#fff'; b.beginPath(); b.ellipse(x - r * 0.4, y - r * 0.4, r * 0.22, r * 0.14, 0, 0, 7); b.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+</script>
+</body>
+</html>

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>하진 버블버블</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1b1f2a; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas { width: min(100vw, calc(100vh * 800 / 448)); height: auto; aspect-ratio: 800 / 448; background: #fff3d6; display: block; }
+  .pad { position: fixed; bottom: 18px; display: none; gap: 14px; z-index: 5; }
+  .pad.left { left: 18px; }
+  .pad.right { right: 18px; }
+  .pad button {
+    width: 72px; height: 72px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7);
+    background: rgba(0,0,0,.35); color: #fff; font-size: 22px; font-weight: bold; touch-action: none;
+  }
+  .pad button.on { background: rgba(255,255,255,.35); }
+  @media (pointer: coarse) { .pad { display: flex; } }
+  .home { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 6px 14px; border-radius: 16px; background: rgba(0,0,0,.4); color: #fff; font: bold 13px sans-serif; text-decoration: none; }
+</style>
+</head>
+<body>
+<a class="home" href="index.html">🏠 게임 선택</a>
+<div id="wrap"><canvas id="game" width="1600" height="896"></canvas></div>
+<div class="pad left">
+  <button data-key="left">◀</button>
+  <button data-key="right">▶</button>
+</div>
+<div class="pad right">
+  <button data-key="shoot">방울</button>
+  <button data-key="jump">점프</button>
+</div>
+
+<script src="kid.js"></script>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = 800, H = 448, T = 32, ROWS = 14, COLS = 25;
+  const GRAVITY = 0.5, MAX_FALL = 9;
+  ctx.scale(canvas.width / W, canvas.height / H);
+
+  // ---------- 입력 ----------
+  const keys = { left: false, right: false, jump: false, shoot: false };
+  let jumpPressed = false, shootPressed = false, startPressed = false;
+  const KEYMAP = {
+    ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
+    Space: 'jump', ArrowUp: 'jump', KeyW: 'jump', KeyZ: 'jump',
+    KeyX: 'shoot', KeyJ: 'shoot', ControlLeft: 'shoot', ControlRight: 'shoot', ShiftLeft: 'shoot', ShiftRight: 'shoot'
+  };
+  function press(k) {
+    if (k === 'jump' && !keys.jump) jumpPressed = true;
+    if (k === 'shoot' && !keys.shoot) shootPressed = true;
+    keys[k] = true;
+  }
+  addEventListener('keydown', e => {
+    initAudio();
+    const k = KEYMAP[e.code];
+    if (k) { press(k); e.preventDefault(); }
+    if (e.code === 'Enter' || e.code === 'Space') startPressed = true;
+  });
+  addEventListener('keyup', e => {
+    const k = KEYMAP[e.code];
+    if (k) { keys[k] = false; e.preventDefault(); }
+  });
+  document.querySelectorAll('.pad button').forEach(b => {
+    const k = b.dataset.key;
+    const down = e => { e.preventDefault(); initAudio(); press(k); b.classList.add('on'); };
+    const up = e => { e.preventDefault(); keys[k] = false; b.classList.remove('on'); };
+    b.addEventListener('pointerdown', down);
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('pointerleave', up);
+  });
+  canvas.addEventListener('pointerdown', () => { initAudio(); startPressed = true; });
+
+  // ---------- 소리 ----------
+  let actx = null;
+  function initAudio() {
+    if (actx) return;
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
+  }
+  function beep(freq, dur, type = 'square', vol = 0.08, slide = 0) {
+    if (!actx) return;
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t); o.stop(t + dur);
+  }
+  const sfx = {
+    jump: () => beep(380, 0.18, 'square', 0.05, 380),
+    shoot: () => beep(620, 0.12, 'sine', 0.12, 500),
+    trap: () => beep(300, 0.2, 'triangle', 0.12, 400),
+    pop: () => { beep(900, 0.06, 'square', 0.07, -500); setTimeout(() => beep(1200, 0.12, 'sine', 0.1), 50); },
+    fruit: () => { beep(988, 0.08); setTimeout(() => beep(1319, 0.2), 70); },
+    die: () => [494, 440, 370, 294, 220].forEach((f, i) => setTimeout(() => beep(f, 0.16, 'triangle', 0.12), i * 110)),
+    clear: () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => setTimeout(() => beep(f, 0.18), i * 120))
+  };
+
+  // ---------- 스테이지 ----------
+  // [행, 시작열, 끝열] 발판 목록. 발판은 아래에서 위로 통과할 수 있다.
+  const LAYOUTS = [
+    [[10, 3, 9], [10, 15, 21], [7, 6, 18], [4, 3, 9], [4, 15, 21]],
+    [[10, 1, 7], [10, 10, 14], [10, 17, 23], [7, 4, 10], [7, 14, 20], [4, 1, 5], [4, 9, 15], [4, 19, 23]],
+    [[10, 5, 19], [7, 1, 8], [7, 16, 23], [4, 6, 18]],
+    [[10, 1, 4], [10, 8, 16], [10, 20, 23], [7, 3, 6], [7, 10, 14], [7, 18, 21], [4, 1, 10], [4, 14, 23]],
+    [[10, 2, 6], [10, 9, 15], [10, 18, 22], [7, 1, 3], [7, 6, 18], [7, 21, 23], [4, 4, 8], [4, 11, 13], [4, 16, 20]]
+  ];
+  const THEMES = [['#ff9db5', '#e86a8c'], ['#8fd4a0', '#4fa56a'], ['#9cc3ff', '#5b8def'], ['#ffc978', '#e89a2e'], ['#c9a6f5', '#8f63d6']];
+  const FRUITS = [['🍒', 500], ['🍊', 700], ['🍉', 1000], ['🍰', 2000]];
+
+  let grid, enemies, bubbles, fruits, popups;
+  let state = 'title', stage = 1, score = 0, lives = 3, frame = 0, stateTimer = 0;
+  let best = +(localStorage.getItem('hajinBubbleBest') || 0);
+  const player = { x: 0, y: 0, w: 22, h: 34, vx: 0, vy: 0, face: 1, onGround: false, invuln: 0, cool: 0 };
+
+  const solid = (c, r) => r >= 0 && r < ROWS && c >= 0 && c < COLS && grid[r][c] === 1;
+
+  function buildStage() {
+    grid = Array.from({ length: ROWS }, (_, r) => Array.from({ length: COLS }, (_, c) => (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1) ? 1 : 0));
+    LAYOUTS[(stage - 1) % LAYOUTS.length].forEach(([r, a, b]) => { for (let c = a; c <= b; c++) grid[r][c] = 1; });
+    const n = Math.min(3 + Math.floor((stage + 1) / 2), 7);
+    const sp = 1 + Math.min(stage - 1, 8) * 0.08;
+    enemies = [];
+    for (let i = 0; i < n; i++) {
+      enemies.push({ x: 90 + (620 / (n - 1)) * i, y: T + 4 + (i % 2) * 96, w: 26, h: 24, vx: (i % 2 ? 1 : -1) * sp, vy: 0, sp, angry: false, onGround: false });
+    }
+    bubbles = []; fruits = []; popups = [];
+    placePlayer();
+  }
+  function placePlayer() {
+    Object.assign(player, { x: 2 * T, y: 13 * T - 34, vx: 0, vy: 0, face: 1, invuln: 150, cool: 0 });
+  }
+  function newGame() { score = 0; lives = 3; stage = 1; buildStage(); state = 'play'; }
+
+  // 좌우 벽 + 위에서만 밟히는 발판
+  function moveEntity(e) {
+    e.hitWall = false;
+    e.x += e.vx;
+    if (e.x < T) { e.x = T; e.hitWall = true; }
+    if (e.x > W - T - e.w) { e.x = W - T - e.w; e.hitWall = true; }
+    e.vy = Math.min(e.vy + GRAVITY, MAX_FALL);
+    const prevBottom = e.y + e.h;
+    e.y += e.vy;
+    e.onGround = false;
+    if (e.y < T) { e.y = T; if (e.vy < 0) e.vy = 0; }
+    if (e.vy >= 0) {
+      const r = Math.floor((e.y + e.h) / T), top = r * T;
+      if (top >= prevBottom - 0.01) {
+        const c1 = Math.floor(e.x / T), c2 = Math.floor((e.x + e.w - 0.01) / T);
+        for (let c = c1; c <= c2; c++) if (solid(c, r)) { e.y = top - e.h; e.vy = 0; e.onGround = true; break; }
+      }
+    }
+  }
+  const overlap = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  const bubbleBox = b => ({ x: b.x - 13, y: b.y - 13, w: 26, h: 26 });
+
+  function popBubble(b) {
+    b.dead = true; sfx.pop();
+    if (b.enemy) {
+      const f = FRUITS[Math.min(FRUITS.length - 1, Math.floor(Math.random() * (2 + stage / 2)))];
+      fruits.push({ x: b.x - 12, y: b.y - 12, w: 24, h: 24, vx: 0, vy: -4, icon: f[0], pts: f[1], life: 600 });
+      addScore(1000, b.x, b.y);
+    } else addScore(10, b.x, b.y);
+  }
+  function addScore(n, x, y) {
+    score += n;
+    if (n >= 100) popups.push({ x, y, text: '+' + n, life: 50 });
+    if (score > best) { best = score; localStorage.setItem('hajinBubbleBest', best); }
+  }
+
+  function update() {
+    frame++;
+    if (state === 'title' || state === 'over') {
+      stateTimer++;
+      if (startPressed && (state === 'title' || stateTimer > 60)) newGame();
+      startPressed = jumpPressed = shootPressed = false;
+      return;
+    }
+    startPressed = false;
+
+    if (state === 'dying') {
+      if (--stateTimer <= 0) {
+        if (--lives <= 0) { state = 'over'; stateTimer = 0; } else { placePlayer(); state = 'play'; }
+      }
+    } else if (state === 'clear') {
+      if (--stateTimer <= 0) { stage++; buildStage(); state = 'play'; }
+    }
+
+    // --- 플레이어 ---
+    const p = player;
+    if (state !== 'dying') {
+      if (keys.left && !keys.right) { p.vx = Math.max(p.vx - 0.5, -3.6); p.face = -1; }
+      else if (keys.right && !keys.left) { p.vx = Math.min(p.vx + 0.5, 3.6); p.face = 1; }
+      else { p.vx *= 0.75; if (Math.abs(p.vx) < 0.1) p.vx = 0; }
+      if (jumpPressed && p.onGround) { p.vy = -10.6; sfx.jump(); }
+      if (!keys.jump && p.vy < -4) p.vy = -4;
+      moveEntity(p);
+      if (p.cool > 0) p.cool--;
+      if (p.invuln > 0) p.invuln--;
+      if ((shootPressed || (keys.shoot && p.cool === 0)) && p.cool === 0) {
+        bubbles.push({ x: p.x + p.w / 2 + p.face * 16, y: p.y + 16, dir: p.face, t: 0, enemy: null });
+        p.cool = 16; sfx.shoot();
+      }
+    }
+    jumpPressed = shootPressed = false;
+
+    // --- 적 ---
+    for (const en of enemies) {
+      const sp = en.sp * (en.angry ? 1.7 : 1);
+      en.vx = Math.sign(en.vx || 1) * sp;
+      if (en.onGround) {
+        const above = p.y + p.h < en.y - 8;
+        if (Math.random() < (above ? 0.02 : 0.006)) en.vy = -10.6;
+        else if (Math.random() < 0.004) en.vx = -en.vx;
+      }
+      moveEntity(en);
+      if (en.hitWall) en.vx = -en.vx;
+      if (state === 'play' && p.invuln === 0 && overlap(p, en)) {
+        state = 'dying'; stateTimer = 90; sfx.die();
+      }
+    }
+
+    // --- 방울 ---
+    for (const b of bubbles) {
+      b.t++;
+      if (b.t <= 18 && !b.enemy) {
+        b.x += b.dir * 9;
+        if (b.x < T + 14) { b.x = T + 14; b.t = 19; }
+        if (b.x > W - T - 14) { b.x = W - T - 14; b.t = 19; }
+        const box = bubbleBox(b);
+        const hit = enemies.find(en => overlap(box, en));
+        if (hit) {
+          enemies.splice(enemies.indexOf(hit), 1);
+          b.enemy = hit; b.t = 19; b.x = hit.x + hit.w / 2; b.y = hit.y + hit.h / 2; sfx.trap();
+        }
+      } else {
+        if (b.y > T + 22) b.y -= 0.9;
+        else b.x += (W / 2 - b.x) * 0.002;
+        b.x += Math.sin(frame * 0.05 + b.y * 0.05) * 0.3;
+        b.x = Math.max(T + 14, Math.min(W - T - 14, b.x));
+        if (state === 'play' && overlap(bubbleBox(b), p)) popBubble(b);
+        else if (b.enemy && b.t > 520) {
+          // 너무 오래 두면 화가 나서 탈출!
+          const en = b.enemy; en.x = b.x - en.w / 2; en.y = b.y - en.h / 2; en.vy = 0; en.angry = true;
+          enemies.push(en); b.enemy = null; b.dead = true;
+        } else if (!b.enemy && b.t > 420) b.dead = true;
+      }
+    }
+    bubbles = bubbles.filter(b => !b.dead);
+
+    // --- 과일 ---
+    for (const f of fruits) {
+      moveEntity(f); f.life--;
+      if (state !== 'dying' && overlap(f, p)) { f.life = 0; addScore(f.pts, f.x + 12, f.y); sfx.fruit(); }
+    }
+    fruits = fruits.filter(f => f.life > 0);
+    for (const pp of popups) { pp.y -= 0.8; pp.life--; }
+    popups = popups.filter(pp => pp.life > 0);
+
+    if (state === 'play' && enemies.length === 0 && !bubbles.some(b => b.enemy)) {
+      state = 'clear'; stateTimer = 200; sfx.clear();
+    }
+  }
+
+  // ---------- 그리기 ----------
+  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); }
+  function ell(x, y, rx, ry) { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); }
+  function text(str, x, y, size, color = '#fff', align = 'center') {
+    ctx.font = `900 ${size}px "Malgun Gothic", "Apple SD Gothic Neo", sans-serif`;
+    ctx.textAlign = align; ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(3, size / 6); ctx.strokeStyle = '#3a2f55';
+    ctx.strokeText(str, x, y); ctx.fillStyle = color; ctx.fillText(str, x, y);
+  }
+
+  // 태엽 달린 심술 로봇 (오리지널 적)
+  function drawEnemy(cx, by, dir, angry, wob) {
+    ctx.save(); ctx.translate(cx, by); ctx.scale(dir, 1);
+    ctx.fillStyle = '#5a5f6b'; ctx.fillRect(-9, -3, 6, 3); ctx.fillRect(3, -3, 6, 3);
+    ctx.save(); ctx.translate(-13, -13); ctx.rotate(wob);
+    ctx.fillStyle = '#f2b632'; ctx.fillRect(-6, -1.5, 6, 3); ell(-7, -3, 2.5, 2.5); ell(-7, 3, 2.5, 2.5);
+    ctx.restore();
+    ctx.fillStyle = angry ? '#ef5a4c' : '#4fb7c9'; rr(-12, -23, 24, 20, 7);
+    ctx.fillStyle = 'rgba(255,255,255,.3)'; rr(-9, -21, 10, 4, 2);
+    ctx.fillStyle = '#fff'; ell(-1, -14, 3.6, 4); ell(7, -14, 3.4, 4);
+    ctx.fillStyle = '#20242e'; ell(0, -13.5, 1.7, 2); ell(8, -13.5, 1.7, 2);
+    ctx.strokeStyle = '#20242e'; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(-5, -20); ctx.lineTo(1.5, -17.5); ctx.moveTo(11, -20); ctx.lineTo(5, -17.5); ctx.stroke();
+    ctx.fillStyle = '#20242e'; ctx.fillRect(0, -8, 8, 2);
+    ctx.fillStyle = '#f2b632'; ctx.fillRect(-1, -27, 2, 4); ell(0, -28, 2.2, 2.2);
+    ctx.restore();
+  }
+
+  function drawBubble(b) {
+    const r = b.t <= 18 && !b.enemy ? 8 + b.t * 0.35 : 15 + Math.sin(frame * 0.12 + b.x) * 0.8;
+    const warn = b.enemy && b.t > 400 && Math.floor(frame / 8) % 2;
+    if (b.enemy) drawEnemy(b.x, b.y + 11, 1, b.enemy.angry, frame * 0.3);
+    ctx.fillStyle = warn ? 'rgba(255,120,120,.35)' : 'rgba(140,220,255,.35)'; ell(b.x, b.y, r, r);
+    ctx.strokeStyle = warn ? '#e8483f' : '#3fa0e0'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.9)'; ell(b.x - r * 0.4, b.y - r * 0.4, r * 0.22, r * 0.14);
+  }
+
+  function drawStage() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#fff6dd'); g.addColorStop(1, '#ffdcec');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(255,255,255,.6)';
+    for (let i = 0; i < 14; i++) {
+      const x = (i * 137 + 60) % W, y = H - ((frame * (0.2 + (i % 4) * 0.08) + i * 71) % (H + 40));
+      ctx.beginPath(); ctx.arc(x, y, 6 + (i % 3) * 5, 0, Math.PI * 2); ctx.fill();
+    }
+    const [c1, c2] = THEMES[(stage - 1) % THEMES.length];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (!grid[r][c]) continue;
+      const x = c * T, y = r * T;
+      ctx.fillStyle = c2; rr(x + 1, y + 1, T - 2, T - 2, 6);
+      ctx.fillStyle = c1; rr(x + 1, y + 1, T - 2, T - 8, 6);
+      ctx.fillStyle = 'rgba(255,255,255,.35)'; rr(x + 5, y + 4, 12, 4, 2);
+    }
+  }
+
+  function draw() {
+    if (state === 'title') {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#fff6dd'); g.addColorStop(1, '#ffdcec');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      for (let i = 0; i < 12; i++) {
+        const x = (i * 71 + 30) % W, y = H - ((frame * (0.5 + (i % 4) * 0.2) + i * 53) % (H + 60)) + 30;
+        drawBubble({ x, y, t: 30, enemy: i % 4 === 0 ? { angry: false } : null });
+      }
+      drawKid(ctx, 400, 400, 4.2, 1, frame, false, true);
+      text('하진 버블버블', 400, 86, 48, '#5bc8f5');
+      if (Math.floor(frame / 30) % 2) text('Enter 키 또는 화면을 눌러 시작!', 400, 136, 22);
+      text('이동 ← →   점프 Space / ↑   방울 X', 400, 436, 16);
+      return;
+    }
+    drawStage();
+    fruits.forEach(f => {
+      if (f.life < 120 && Math.floor(frame / 5) % 2) return;
+      ctx.font = '24px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(f.icon, f.x + 12, f.y + 22);
+    });
+    enemies.forEach(en => drawEnemy(en.x + en.w / 2, en.y + en.h, Math.sign(en.vx) || 1, en.angry, frame * 0.2));
+    const p = player;
+    if (state === 'dying') {
+      ctx.save(); ctx.translate(p.x + p.w / 2, p.y + p.h / 2); ctx.rotate((90 - stateTimer) * 0.25);
+      drawKid(ctx, 0, p.h / 2, 34 / 44, p.face, frame, true, false); ctx.restore();
+    } else if (!(p.invuln > 0 && Math.floor(frame / 4) % 2)) {
+      drawKid(ctx, p.x + p.w / 2, p.y + p.h, 34 / 44, p.face, frame, !p.onGround, Math.abs(p.vx) > 0.3);
+    }
+    bubbles.forEach(drawBubble);
+    popups.forEach(pp => text(pp.text, pp.x, pp.y, 16, '#ffe36b'));
+
+    text('점수 ' + String(score).padStart(6, '0'), 44, 23, 17, '#fff', 'left');
+    text('최고 ' + String(best).padStart(6, '0'), 250, 23, 17, '#ffe36b', 'left');
+    text('스테이지 ' + stage, 520, 23, 17);
+    drawKid(ctx, 690, 29, 0.5, 1, 0, false, false); text('× ' + lives, 706, 23, 17, '#fff', 'left');
+
+    if (state === 'clear') text('스테이지 ' + stage + ' 클리어! 🎉', 400, 220, 44, '#ffe36b');
+    else if (state === 'over') {
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
+      text('게임 오버', 400, 200, 52, '#ff8a80');
+      text('점수 ' + score + '   ·   Enter / 화면 터치로 다시 도전!', 400, 250, 20);
+    }
+  }
+
+  // ---------- 루프 ----------
+  buildStage();
+  let last = performance.now(), acc = 0;
+  function loop(now) {
+    acc += Math.min(100, now - last); last = now;
+    while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
