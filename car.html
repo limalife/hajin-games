@@ -54,13 +54,13 @@
   // ---------- 상태 ----------
   let state = 'title', frame = 0, stateTimer = 0;
   let dist = 0, stars = 0, lives = MAX_LIVES, speed = 2.6, nextSpawn = 0, scroll = 0;
-  let objects = [], popups = [];
+  let objects = [], popups = [], boost = 1, sparks = [];
   let best = +(localStorage.getItem('hajinCarBest') || 0);
   const player = { lane: 1, x: LANES[1], invuln: 0, shield: 0, tilt: 0 };
   const score = () => Math.floor(dist / 10) + stars * 10;
 
   function newGame() {
-    dist = 0; stars = 0; lives = MAX_LIVES; speed = 2.6; nextSpawn = 260; objects = []; popups = [];
+    dist = 0; stars = 0; lives = MAX_LIVES; speed = 2.6; nextSpawn = 260; objects = []; popups = []; sparks = []; boost = 1;
     Object.assign(player, { lane: 1, x: LANES[1], invuln: 0, shield: 0, tilt: 0 });
     state = 'play';
   }
@@ -110,7 +110,8 @@
     frame++;
     if (state !== 'play') { stateTimer++; scroll += 1.5; return; }
 
-    speed = 2.6 + Math.min(dist / 6000, 2.4);
+    boost += ((player.shield > 45 ? 1.8 : 1) - boost) * 0.08;
+    speed = (2.6 + Math.min(dist / 6000, 2.4)) * boost;
     dist += speed; scroll += speed;
     const p = player;
     p.x += (LANES[p.lane] - p.x) * 0.25;
@@ -122,15 +123,20 @@
     if (nextSpawn <= 0) { spawnRow(); nextSpawn = Math.max(260, 360 - dist / 300) + Math.random() * 80; }
 
     for (const o of objects) {
+      // 부딪혀 날아가는 중인 장애물
+      if (o.fly) { o.x += o.vx; o.y += o.vy; o.vy += 0.25; o.rot += o.vr; o.size += 0.02; continue; }
       o.y += speed;
       if (o.dead || Math.abs(o.x - p.x) > 34 || Math.abs(o.y - PLAYER_Y) > 44) continue;
       if (o.kind === 'item') {
         o.dead = true;
         if (o.type === 'star') { stars++; sfx.star(); popups.push({ x: o.x, y: o.y, text: '+10', life: 40 }); }
         else if (o.type === 'heart') { lives = Math.min(MAX_LIVES, lives + 1); sfx.power(); popups.push({ x: o.x, y: o.y, text: '❤️+1', life: 50 }); }
-        else { p.shield = 480; sfx.power(); popups.push({ x: o.x, y: o.y, text: '무적!', life: 50 }); }
+        else { p.shield = 480; sfx.power(); popups.push({ x: o.x, y: o.y, text: '무적 부스터!', life: 50 }); }
       } else if (p.shield > 0) {
-        o.dead = true; stars++; sfx.smash(); popups.push({ x: o.x, y: o.y, text: '쾅! +10', life: 40 });
+        const side = o.x === p.x ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(o.x - p.x);
+        Object.assign(o, { fly: true, vx: side * (5 + Math.random() * 3), vy: -9 - Math.random() * 3, rot: 0, vr: side * (0.25 + Math.random() * 0.2), size: 1 });
+        stars++; sfx.smash(); popups.push({ x: o.x, y: o.y, text: '쾅! +10', life: 40 });
+        for (let i = 0; i < 6; i++) sparks.push({ x: o.x, y: o.y, vx: (Math.random() - 0.5) * 9, vy: -Math.random() * 7 - 1, life: 24 });
       } else if (p.invuln === 0) {
         o.dead = true; lives--; p.invuln = 150; sfx.crash();
         if (lives <= 0) {
@@ -139,7 +145,9 @@
         }
       }
     }
-    objects = objects.filter(o => !o.dead && o.y < H + 80);
+    objects = objects.filter(o => !o.dead && o.y < H + 80 && o.x > -90 && o.x < W + 90 && o.y > -200);
+    for (const sp of sparks) { sp.x += sp.vx; sp.y += sp.vy; sp.vy += 0.4; sp.life--; }
+    sparks = sparks.filter(sp => sp.life > 0);
     for (const pp of popups) { pp.y -= 1; pp.life--; }
     popups = popups.filter(pp => pp.life > 0);
   }
@@ -263,9 +271,24 @@
       return;
     }
 
-    objects.forEach(drawObject);
+    // 부스터 속도선
+    if (boost > 1.15) {
+      ctx.fillStyle = `rgba(255,255,255,${Math.min(0.55, (boost - 1) * 0.8)})`;
+      for (let i = 0; i < 9; i++) ctx.fillRect(ROAD_L + 8 + (i * 97 + Math.floor(frame / 3) * 53) % 254, (i * 83 + frame * 34) % (H + 60) - 60, 2.5, 46);
+    }
+    objects.forEach(o => {
+      if (!o.fly) return drawObject(o);
+      ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rot); ctx.scale(o.size, o.size);
+      drawObject({ ...o, x: 0, y: 0 }); ctx.restore();
+    });
+    ctx.fillStyle = '#ffd23f'; sparks.forEach(sp => ell(sp.x, sp.y, 3, 3));
     const p = player;
     if (!(p.invuln > 0 && Math.floor(frame / 4) % 2)) {
+      if (boost > 1.15) {
+        const fl = 16 + Math.sin(frame * 0.9) * 6;
+        ctx.fillStyle = '#ff9f1c'; ctx.beginPath(); ctx.moveTo(p.x - 11, PLAYER_Y + 32); ctx.lineTo(p.x, PLAYER_Y + 34 + fl * 1.6); ctx.lineTo(p.x + 11, PLAYER_Y + 32); ctx.fill();
+        ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.moveTo(p.x - 5, PLAYER_Y + 32); ctx.lineTo(p.x, PLAYER_Y + 34 + fl); ctx.lineTo(p.x + 5, PLAYER_Y + 32); ctx.fill();
+      }
       drawCar(p.x, PLAYER_Y, '#e23b3b', true, p.tilt);
       if (p.shield > 0 && (p.shield > 90 || Math.floor(frame / 6) % 2)) {
         ctx.fillStyle = 'rgba(120,200,255,.3)'; ell(p.x, PLAYER_Y, 36, 46);
