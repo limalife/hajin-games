@@ -31,7 +31,7 @@ function drawKid(ctx, cx, by, s, face, t, air, moving) {
   leg(-4, sw); leg(4, -sw);
 
   // 줄무늬 긴팔 티
-  striped(-9, -25, 18, 14.5, 5);
+  striped(-8, -25, 16, 14.5, 5);
   ctx.save(); ctx.translate(0, -22); ctx.rotate(air ? -2.3 : -sw * 0.8);
   striped(-3, 0, 6, 10, 3);
   ctx.strokeStyle = 'rgba(90,100,110,.35)'; ctx.lineWidth = 0.5;
@@ -39,40 +39,55 @@ function drawKid(ctx, cx, by, s, face, t, air, moving) {
   ctx.fillStyle = SKIN; ell(0, 10.5, 2.8, 2.8);
   ctx.restore();
 
-  // 목, 얼굴
-  ctx.fillStyle = '#f5cdb0'; rr(-2, -24.5, 6, 3, 1);
-  ctx.fillStyle = SKIN; ell(1, -32, 11.2, 10.6); ell(1.5, -27.6, 11, 6.6);
+  // 목, 갸름한 달걀형 얼굴 (볼은 통통하고 턱은 좁게)
+  ctx.fillStyle = '#f5cdb0'; rr(-1.5, -24.5, 5, 3.5, 1);
+  ctx.fillStyle = SKIN;
+  ctx.beginPath();
+  ctx.moveTo(-8.5, -34);
+  ctx.bezierCurveTo(-9, -27, -5, -21.5, 1.5, -21.5);
+  ctx.bezierCurveTo(8, -21.5, 11, -27, 10.5, -34);
+  ctx.bezierCurveTo(10.5, -44, -8.5, -44, -8.5, -34);
+  ctx.fill();
 
-  // 머리카락: 둥근 윗머리 + 짧은 옆머리 + 삐죽삐죽 앞머리
+  // 머리카락: 옆은 짧고, 끝이 삐죽삐죽하며 가운데가 갈라진 앞머리
   ctx.fillStyle = HAIR;
-  ctx.beginPath(); ctx.ellipse(1, -35, 12.2, 10, 0, Math.PI, Math.PI * 2); ctx.closePath(); ctx.fill();
-  rr(-11.2, -35.5, 5, 6.8, [0, 0, 3, 3]);
-  poly([[-6.5, -35.5], [-5, -33.2], [-2.6, -34.4], [-1, -32.8], [1, -34.2], [2.8, -32.9], [4.6, -34.8],
-        [6.8, -34.8], [8.4, -33], [9.8, -34.3], [11.2, -33.3], [12.6, -34.8], [13.2, -35.5]]);
-  poly([[-4, -44], [-2.2, -47.2], [-0.2, -44.5]]);
-  poly([[0.6, -44.7], [3.4, -46.8], [4.2, -44.3]]);
-  // 앞머리 가운데 갈라진 틈
-  ctx.fillStyle = SKIN; poly([[4.6, -34.7], [5.7, -37.6], [6.8, -34.7]]);
-  ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1.3;
-  ctx.beginPath(); ctx.ellipse(1, -35, 8.5, 7, 0, Math.PI * 1.15, Math.PI * 1.6); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-9.4, -29.5);
+  ctx.bezierCurveTo(-11.5, -48, 13.5, -48, 11.3, -34.5);
+  [[10, -33.2], [8.8, -34.6], [7.4, -33], [6.6, -35], [5.6, -37.3], [4.6, -35], [3, -33.2], [1.2, -34.6],
+   [-0.6, -33], [-2.6, -34.5], [-4.4, -33.3], [-5.8, -35], [-6, -30.5]].forEach(([x, y]) => ctx.lineTo(x, y));
+  ctx.quadraticCurveTo(-7.5, -29, -9.4, -29.5);
+  ctx.fill();
+  poly([[-3, -43.4], [-1.5, -46.8], [0.5, -43.7]]);
+  poly([[1, -43.7], [3.6, -46.2], [4.4, -43.2]]);
+  ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.ellipse(1, -35.5, 7, 6.5, 0, Math.PI * 1.15, Math.PI * 1.6); ctx.stroke();
 
   // 쏙 나온 귀
-  ctx.fillStyle = SKIN; ell(-7.2, -29.5, 3.2, 4.1);
-  ctx.fillStyle = '#f0bb9c'; ell(-7, -29.5, 1.4, 2.2);
+  ctx.fillStyle = SKIN; ell(-7.8, -30, 2.6, 3.7);
+  ctx.fillStyle = '#f0bb9c'; ell(-7.6, -30, 1.1, 2);
 
-  // 옅은 눈썹, 가로로 긴 까만 눈
-  ctx.strokeStyle = 'rgba(70,50,40,.55)'; ctx.lineWidth = 0.6; ctx.lineCap = 'round';
+  // 옅은 눈썹, 가늘고 긴 아몬드 눈
+  const eye = (ex, ey, w) => {
+    ctx.fillStyle = '#1b1310';
+    ctx.beginPath();
+    ctx.moveTo(ex - w, ey + 0.1);
+    ctx.quadraticCurveTo(ex, ey - 2.1, ex + w, ey - 0.1);
+    ctx.quadraticCurveTo(ex, ey + 1.6, ex - w, ey + 0.1);
+    ctx.fill();
+    ctx.fillStyle = '#fff'; ell(ex + 0.4, ey - 0.5, 0.45, 0.45);
+  };
+  ctx.strokeStyle = 'rgba(70,50,40,.5)'; ctx.lineWidth = 0.55; ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(2.4, -31.4); ctx.quadraticCurveTo(4, -32, 5.6, -31.5);
-  ctx.moveTo(8.4, -31.5); ctx.quadraticCurveTo(9.9, -32, 11.2, -31.4);
+  ctx.moveTo(2, -32.3); ctx.lineTo(4.8, -32.7);
+  ctx.moveTo(7.6, -32.7); ctx.lineTo(10, -32.3);
   ctx.stroke();
-  ctx.fillStyle = '#1b1310'; ell(4, -29, 1.75, 1.3); ell(9.8, -29, 1.6, 1.3);
-  ctx.fillStyle = '#fff'; ell(4.5, -29.4, 0.5, 0.5); ell(10.2, -29.4, 0.5, 0.5);
+  eye(3.6, -30.3, 2.1); eye(8.8, -30.3, 1.8);
 
-  // 볼, 코, 씩 웃는 입
-  ctx.fillStyle = 'rgba(255,125,125,.38)'; ell(8.6, -25.3, 2, 1.4); ell(1.2, -25.3, 2, 1.4);
-  ctx.fillStyle = '#e8b596'; ell(7.4, -26.2, 0.9, 0.6);
-  ctx.strokeStyle = '#c4605f'; ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.moveTo(6, -23.6); ctx.quadraticCurveTo(7.6, -22.6, 9.3, -23.9); ctx.stroke();
+  // 볼, 코, 씩 웃는 작은 입
+  ctx.fillStyle = 'rgba(255,125,125,.3)'; ell(8.2, -27, 1.8, 1.2); ell(0.6, -26.8, 1.9, 1.2);
+  ctx.fillStyle = '#e6b091'; ell(6.7, -27.6, 0.8, 0.55);
+  ctx.strokeStyle = '#c4605f'; ctx.lineWidth = 0.75;
+  ctx.beginPath(); ctx.moveTo(4.9, -24.9); ctx.quadraticCurveTo(6.5, -24, 8.2, -25.2); ctx.stroke();
   ctx.restore();
 }
