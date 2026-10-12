@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>하진 셈셈 히어로</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: #23304a;
+    background: linear-gradient(#bfe6ff, #fff6dd); user-select: none; -webkit-user-select: none; touch-action: manipulation;
+    display: flex; flex-direction: column; align-items: center; padding: 12px 14px 70px; min-height: 100vh; min-height: 100dvh;
+  }
+  .home { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 6px 14px; border-radius: 16px; background: rgba(0,0,0,.4); color: #fff; font: bold 13px sans-serif; text-decoration: none; }
+  #app { width: 100%; max-width: 520px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  h1 { margin: 6px 0 0; font-size: clamp(28px, 8vw, 42px); color: #fff; text-shadow: 0 3px 0 #23304a, 0 0 10px rgba(35,48,74,.35); text-align: center; }
+  canvas { width: min(60vw, 240px); height: auto; }
+  .screen { display: none; width: 100%; flex-direction: column; align-items: center; gap: 12px; }
+  .screen.on { display: flex; }
+  .label { font-weight: bold; font-size: 17px; margin-top: 4px; }
+  .row { display: flex; gap: 10px; width: 100%; }
+  button {
+    font-family: inherit; font-weight: 900; color: #23304a; background: #fff; border: 4px solid #23304a; border-radius: 18px;
+    box-shadow: 0 6px 0 #23304a; cursor: pointer; transition: transform .08s, box-shadow .08s;
+  }
+  button:active { transform: translateY(4px); box-shadow: 0 2px 0 #23304a; }
+  .opt { flex: 1; min-width: 0; padding: 12px 4px; font-size: 18px; }
+  .opt.sel { background: #ffd23f; }
+  .go { width: 100%; padding: 16px; font-size: 26px; background: #e23b3b; color: #fff; margin-top: 8px; }
+  .hud { width: 100%; display: flex; justify-content: space-between; font-weight: 900; font-size: 18px; }
+  .bar { width: 100%; height: 14px; background: #fff; border: 3px solid #23304a; border-radius: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: #58c452; transition: width .3s; }
+  #question { font-size: clamp(44px, 14vw, 72px); font-weight: 900; letter-spacing: 2px; margin: 0; }
+  #msg { height: 30px; font-size: 22px; font-weight: 900; }
+  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: 100%; }
+  .choice { padding: 18px 4px; font-size: clamp(30px, 9vw, 42px); }
+  .choice.ok { background: #58c452; color: #fff; }
+  .choice.no { background: #ff8a80; color: #fff; }
+  #stars { font-size: 34px; letter-spacing: 2px; text-align: center; line-height: 1.3; }
+  #resultText { font-size: 24px; font-weight: 900; text-align: center; }
+</style>
+</head>
+<body>
+<a class="home" href="index.html">🏠 게임 선택</a>
+<div id="app">
+  <h1>하진 셈셈 히어로</h1>
+  <canvas id="kid" width="480" height="400"></canvas>
+
+  <div class="screen on" id="menu">
+    <div class="label">어떤 셈을 할까요?</div>
+    <div class="row" id="opSel">
+      <button class="opt sel" data-v="add">➕ 덧셈</button>
+      <button class="opt" data-v="sub">➖ 뺄셈</button>
+      <button class="opt" data-v="mix">🔀 섞어서</button>
+    </div>
+    <div class="label">얼마나 어렵게?</div>
+    <div class="row" id="lvSel">
+      <button class="opt sel" data-v="easy">쉬움<br><small>올림·내림 없음</small></button>
+      <button class="opt" data-v="hard">보통<br><small>올림·내림 있음</small></button>
+    </div>
+    <button class="go" id="start">시작!</button>
+  </div>
+
+  <div class="screen" id="play">
+    <div class="hud"><span id="count">1 / 10</span><span id="score">⭐ 0</span><span id="streak"></span></div>
+    <div class="bar"><i id="prog"></i></div>
+    <p id="question">12 + 34 = ?</p>
+    <div id="msg"></div>
+    <div class="choices" id="choices"></div>
+  </div>
+
+  <div class="screen" id="result">
+    <div id="stars"></div>
+    <div id="resultText"></div>
+    <button class="go" id="again">다시 하기</button>
+    <button class="opt" id="toMenu" style="width:100%">셈 종류 바꾸기</button>
+  </div>
+</div>
+
+<script src="kid.js"></script>
+<script>
+(() => {
+  const TOTAL = 10;
+  const $ = id => document.getElementById(id);
+  const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  let op = 'add', level = 'easy', index = 0, score = 0, streak = 0, answer = 0, locked = false;
+  let mood = 'idle', moodT = 0, frame = 0;
+
+  // ---------- 소리 ----------
+  let actx = null;
+  function beep(freq, dur, type = 'square', vol = 0.08) {
+    try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + dur);
+  }
+  const sfx = {
+    ok: () => { beep(784, 0.1); setTimeout(() => beep(1047, 0.1), 90); setTimeout(() => beep(1319, 0.2), 180); },
+    no: () => { beep(220, 0.18, 'triangle', 0.14); setTimeout(() => beep(175, 0.3, 'triangle', 0.14), 160); },
+    end: () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => setTimeout(() => beep(f, 0.18), i * 120))
+  };
+
+  // ---------- 문제 만들기 ----------
+  function makeProblem() {
+    const kind = op === 'mix' ? (Math.random() < 0.5 ? 'add' : 'sub') : op;
+    let a, b;
+    if (kind === 'add') {
+      if (level === 'easy') {
+        // 일의 자리끼리, 십의 자리끼리 더해도 9를 넘지 않는다
+        const a1 = rand(0, 8), a10 = rand(1, 8);
+        a = a10 * 10 + a1; b = rand(1, 9 - a10) * 10 + rand(0, 9 - a1);
+      } else {
+        const a1 = rand(1, 9);
+        a = rand(1, 8) * 10 + a1; b = rand(1, 8) * 10 + rand(10 - a1, 9);
+      }
+      return { text: `${a} + ${b}`, ans: a + b };
+    }
+    if (level === 'easy') {
+      const a1 = rand(0, 9), a10 = rand(2, 9);
+      a = a10 * 10 + a1; b = rand(1, a10 - 1) * 10 + rand(0, a1);
+    } else {
+      const a1 = rand(0, 8), a10 = rand(3, 9);
+      a = a10 * 10 + a1; b = rand(1, a10 - 2) * 10 + rand(a1 + 1, 9);
+    }
+    return { text: `${a} − ${b}`, ans: a - b };
+  }
+  function makeChoices(ans) {
+    const set = new Set([ans]);
+    const cands = [ans + 10, ans - 10, ans + 1, ans - 1, ans + 2, ans - 2, ans + 9, ans - 9, ans + 11, ans - 11].sort(() => Math.random() - 0.5);
+    for (const c of cands) { if (set.size >= 4) break; if (c >= 0) set.add(c); }
+    return [...set].sort(() => Math.random() - 0.5);
+  }
+
+  // ---------- 화면 ----------
+  function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
+  function select(groupId, set) {
+    $(groupId).addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      $(groupId).querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
+      set(b.dataset.v);
+    });
+  }
+  select('opSel', v => op = v);
+  select('lvSel', v => level = v);
+
+  function startGame() { index = 0; score = 0; streak = 0; show('play'); next(); }
+  function next() {
+    if (index >= TOTAL) return finish();
+    const p = makeProblem();
+    answer = p.ans; locked = false;
+    $('question').textContent = p.text + ' = ?';
+    $('count').textContent = `${index + 1} / ${TOTAL}`;
+    $('score').textContent = '⭐ ' + score;
+    $('streak').textContent = streak >= 2 ? `🔥 ${streak}연속` : '';
+    $('prog').style.width = (index / TOTAL * 100) + '%';
+    $('msg').textContent = '';
+    $('choices').innerHTML = '';
+    makeChoices(answer).forEach(c => {
+      const b = document.createElement('button');
+      b.className = 'choice'; b.textContent = c;
+      b.addEventListener('click', () => pick(b, c));
+      $('choices').appendChild(b);
+    });
+  }
+  function pick(btn, value) {
+    if (locked) return;
+    locked = true; index++;
+    const right = value === answer;
+    if (right) {
+      score++; streak++; btn.classList.add('ok'); sfx.ok();
+      $('msg').textContent = ['정답! 👍', '최고야! 🎉', '멋져요! ✨', '척척박사! 🤓'][rand(0, 3)];
+      mood = 'happy';
+    } else {
+      streak = 0; btn.classList.add('no'); sfx.no();
+      [...$('choices').children].forEach(b => { if (+b.textContent === answer) b.classList.add('ok'); });
+      $('msg').textContent = `아쉬워요! 정답은 ${answer}`;
+      mood = 'sad';
+    }
+    moodT = 0;
+    $('question').textContent = $('question').textContent.replace('?', answer);
+    $('score').textContent = '⭐ ' + score;
+    $('prog').style.width = (index / TOTAL * 100) + '%';
+    setTimeout(next, right ? 1000 : 2200);
+  }
+  function finish() {
+    show('result'); sfx.end(); mood = 'happy'; moodT = 0;
+    $('stars').textContent = '⭐'.repeat(score) + '☆'.repeat(TOTAL - score);
+    $('resultText').textContent = `${TOTAL}문제 중 ${score}문제 정답! ` +
+      (score === TOTAL ? '완벽해요! 🏆' : score >= 7 ? '정말 잘했어요! 🎉' : score >= 4 ? '좋아요, 조금만 더! 💪' : '다시 도전해 봐요! 😊');
+  }
+  $('start').addEventListener('click', startGame);
+  $('again').addEventListener('click', startGame);
+  $('toMenu').addEventListener('click', () => show('menu'));
+
+  // ---------- 하진 그리기 ----------
+  const ctx = $('kid').getContext('2d');
+  function draw() {
+    frame++; moodT++;
+    ctx.clearRect(0, 0, 480, 400);
+    let y = 380, x = 240, air = false;
+    if (mood === 'happy') { const j = Math.abs(Math.sin(moodT * 0.12)) * 70; y -= j; air = j > 8; if (moodT > 78) mood = 'idle'; }
+    else if (mood === 'sad') { x += Math.sin(moodT * 0.6) * Math.max(0, 14 - moodT * 0.2); if (moodT > 70) mood = 'idle'; }
+    ctx.fillStyle = 'rgba(35,48,74,.15)';
+    ctx.beginPath(); ctx.ellipse(240, 384, 90 - (380 - y) * 0.4, 12, 0, 0, 7); ctx.fill();
+    drawKid(ctx, x, y, 7.6, 1, frame, air, false);
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
+</body>
+</html>
