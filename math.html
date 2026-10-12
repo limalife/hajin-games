@@ -213,16 +213,15 @@
       $('msg').textContent = ['정답! 👍', '최고야! 🎉', '멋져요! ✨', '척척박사! 🤓'][rand(0, 3)];
       mood = 'happy';
     } else {
-      // 기회를 모두 쓴 뒤에만 정답을 보여 준다
+      // 기회를 모두 써도 정답은 보여 주지 않고 다음 문제로 넘어간다
       streak = 0; (btn || $('typed')).classList.add('no'); sfx.no();
-      [...$('choices').children].forEach(b => { if (+b.textContent === answer) b.classList.add('ok'); });
-      $('msg').textContent = `아쉬워요! 정답은 ${answer}`;
+      $('msg').textContent = '아쉬워요! 다음 문제로 가요';
       mood = 'sad';
     }
-    $('question').textContent = $('question').textContent.replace('?', answer);
+    if (right) $('question').textContent = $('question').textContent.replace('?', answer);
     $('score').textContent = '⭐ ' + score;
     $('prog').style.width = (index / TOTAL * 100) + '%';
-    setTimeout(next, right ? 1000 : 2200);
+    setTimeout(next, right ? 1000 : 1600);
   }
   function finish() {
     document.body.classList.remove('typing');
