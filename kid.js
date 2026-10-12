@@ -1,42 +1,38 @@
-// 주인공 하진: 가운데가 살짝 갈라진 삐죽 앞머리, 가로로 긴 까만 눈, 쏙 나온 귀, 씩 웃는 입,
-// 회색 줄무늬 긴팔 + 연회색 카고 바지 + 흰 운동화 (키 44 단위, 발밑 중앙이 원점)
+// 주인공 하진: 가운데가 살짝 갈라진 삐죽 앞머리, 작고 까만 눈, 쏙 나온 귀, 갸름한 얼굴,
+// 빨강·파랑 히어로 슈트(가슴에 노란 별) (키 44 단위, 발밑 중앙이 원점)
 function drawKid(ctx, cx, by, s, face, t, air, moving) {
   const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); };
   const ell = (x, y, rx, ry) => { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); };
   const poly = pts => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); };
-  // 줄무늬 천: 둥근 사각형 안에 가로 줄을 채운다
-  const striped = (x, y, w, h, r) => {
-    ctx.fillStyle = '#eceef0'; rr(x, y, w, h, r);
-    ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.clip();
-    ctx.fillStyle = '#7f8993';
-    for (let ly = y + 1; ly < y + h; ly += 1.9) ctx.fillRect(x, ly, w, 0.7);
-    ctx.restore();
-  };
-  const SKIN = '#ffdcc2', HAIR = '#1d1714';
+  const SKIN = '#ffdcc2', HAIR = '#1d1714', RED = '#e23b3b', BLUE = '#2f5fc4';
 
   ctx.save();
   ctx.translate(cx, by); ctx.scale(face * s, s);
   const sw = air ? 0.9 : (moving ? Math.sin(t * 0.35) : 0);
 
-  // 통 넓은 카고 바지와 운동화
+  // 파란 히어로 바지와 빨간 부츠
   const leg = (x, a) => {
     ctx.save(); ctx.translate(x, -13); ctx.rotate(a * 0.6);
-    ctx.fillStyle = '#c6ccd2'; rr(-4.5, 0, 9, 10.5, 2.5);
-    ctx.fillStyle = '#b0b8c0'; rr(-3.6, 3, 5, 4.2, 1);
-    ctx.fillStyle = '#f4f5f7'; rr(-4, 8.5, 11, 4.5, 2.2);
-    ctx.fillStyle = '#b9c0c9'; ctx.fillRect(1, 9.6, 3.5, 1.4);
-    ctx.fillStyle = '#8f96a0'; ctx.fillRect(-3.5, 12, 10, 1);
+    ctx.fillStyle = BLUE; rr(-4, 0, 8, 10, 2.5);
+    ctx.fillStyle = RED; rr(-4, 6.5, 11, 6.5, 2.4);
+    ctx.fillStyle = '#fff'; ctx.fillRect(-4, 6.5, 8, 1.1);
+    ctx.fillStyle = '#8c1f1f'; ctx.fillRect(-3.5, 12, 10, 1);
     ctx.restore();
   };
   leg(-4, sw); leg(4, -sw);
 
-  // 줄무늬 긴팔 티
-  striped(-8, -25, 16, 14.5, 5);
+  // 빨간 히어로 슈트: 가슴에 노란 별, 노란 벨트, 파란 소매와 빨간 장갑
+  ctx.fillStyle = RED; rr(-8, -25, 16, 14.5, 5);
+  ctx.fillStyle = '#ffd23f'; ctx.fillRect(-7.3, -13.4, 14.6, 1.8);
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? 1.25 : 2.9, ang = -Math.PI / 2 + i * Math.PI / 5;
+    ctx.lineTo(4.7 + Math.cos(ang) * r, -19 + Math.sin(ang) * r);
+  }
+  ctx.closePath(); ctx.fill();
   ctx.save(); ctx.translate(0, -22); ctx.rotate(air ? -2.3 : -sw * 0.8);
-  striped(-3, 0, 6, 10, 3);
-  ctx.strokeStyle = 'rgba(90,100,110,.35)'; ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.roundRect(-3, 0, 6, 10, 3); ctx.stroke();
-  ctx.fillStyle = SKIN; ell(0, 10.5, 2.8, 2.8);
+  ctx.fillStyle = BLUE; rr(-3, 0, 6, 10, 3);
+  ctx.fillStyle = RED; ell(0, 10.3, 3, 3);
   ctx.restore();
 
   // 목, 갸름한 달걀형 얼굴 (볼은 통통하고 턱은 좁게)
@@ -67,17 +63,14 @@ function drawKid(ctx, cx, by, s, face, t, air, moving) {
   ctx.fillStyle = SKIN; ell(-7.8, -30, 2.6, 3.7);
   ctx.fillStyle = '#f0bb9c'; ell(-7.6, -30, 1.1, 2);
 
-  // 순한 눈매: 작고 까만 눈 위에 완만한 눈꺼풀 선, 옅고 짧은 눈썹
+  // 작고 단순한 까만 눈, 옅은 눈썹
   const eye = (ex, ey, w) => {
-    ctx.strokeStyle = 'rgba(60,45,38,.55)'; ctx.lineWidth = 0.6;
-    ctx.beginPath(); ctx.moveTo(ex - w, ey - 2.5); ctx.quadraticCurveTo(ex, ey - 3.2, ex + w, ey - 2.6); ctx.stroke();
-    ctx.fillStyle = '#1b1310'; ell(ex, ey, w, w * 0.86);
-    ctx.strokeStyle = '#2a1d18'; ctx.lineWidth = 0.45;
-    ctx.beginPath(); ctx.moveTo(ex - w - 0.5, ey - 0.15); ctx.quadraticCurveTo(ex, ey - w * 0.86 - 0.8, ex + w + 0.5, ey - 0.15); ctx.stroke();
-    ctx.fillStyle = '#fff'; ell(ex + w * 0.3, ey - w * 0.3, w * 0.27, w * 0.27);
+    ctx.strokeStyle = 'rgba(60,45,38,.45)'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(ex - 1.2, ey - 2.3); ctx.quadraticCurveTo(ex, ey - 2.8, ex + 1.2, ey - 2.4); ctx.stroke();
+    ctx.fillStyle = '#241915'; ell(ex, ey, w, w * 1.1);
   };
   ctx.lineCap = 'round';
-  eye(3.5, -29.8, 1.55); eye(8.8, -29.8, 1.4);
+  eye(3.7, -29.6, 1.05); eye(8.6, -29.6, 0.95);
 
   // 볼, 작은 코, 살짝 다문 입
   ctx.fillStyle = 'rgba(255,125,125,.26)'; ell(7.9, -26.6, 1.5, 1.05); ell(0.4, -26.5, 1.9, 1.15);
