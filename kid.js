@@ -63,14 +63,15 @@ function drawKid(ctx, cx, by, s, face, t, air, moving) {
   ctx.fillStyle = SKIN; ell(-7.8, -30, 2.6, 3.7);
   ctx.fillStyle = '#f0bb9c'; ell(-7.6, -30, 1.1, 2);
 
-  // 작고 단순한 까만 눈, 옅은 눈썹
+  // 동글동글한 까만 눈에 작은 반짝이 하나, 옅은 눈썹
   const eye = (ex, ey, w) => {
-    ctx.strokeStyle = 'rgba(60,45,38,.45)'; ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(ex - 1.2, ey - 2.3); ctx.quadraticCurveTo(ex, ey - 2.8, ex + 1.2, ey - 2.4); ctx.stroke();
-    ctx.fillStyle = '#241915'; ell(ex, ey, w, w * 1.1);
+    ctx.strokeStyle = 'rgba(60,45,38,.4)'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(ex - 1.2, ey - 2.8); ctx.quadraticCurveTo(ex, ey - 3.3, ex + 1.2, ey - 2.9); ctx.stroke();
+    ctx.fillStyle = '#241915'; ell(ex, ey, w, w * 1.2);
+    ctx.fillStyle = '#fff'; ell(ex + w * 0.3, ey - w * 0.45, w * 0.3, w * 0.3);
   };
   ctx.lineCap = 'round';
-  eye(3.7, -29.6, 1.05); eye(8.6, -29.6, 0.95);
+  eye(3.6, -29.5, 1.4); eye(8.7, -29.5, 1.28);
 
   // 볼, 작은 코, 살짝 다문 입
   ctx.fillStyle = 'rgba(255,125,125,.26)'; ell(7.9, -26.6, 1.5, 1.05); ell(0.4, -26.5, 1.9, 1.15);
