@@ -67,18 +67,23 @@ function drawKid(ctx, cx, by, s, face, t, air, moving) {
   ctx.fillStyle = SKIN; ell(-7.8, -30, 2.6, 3.7);
   ctx.fillStyle = '#f0bb9c'; ell(-7.6, -30, 1.1, 2);
 
-  // 초롱초롱한 까만 눈 (반짝이 두 개)
+  // 순한 눈매: 작고 까만 눈 위에 완만한 눈꺼풀 선, 옅고 짧은 눈썹
   const eye = (ex, ey, w) => {
-    ctx.fillStyle = '#1b1310'; ell(ex, ey, w, w * 1.22);
-    ctx.fillStyle = '#4a342a'; ell(ex, ey + w * 0.45, w * 0.6, w * 0.5);
-    ctx.fillStyle = '#fff'; ell(ex + w * 0.35, ey - w * 0.5, w * 0.36, w * 0.36); ell(ex - w * 0.4, ey + w * 0.45, w * 0.18, w * 0.18);
+    ctx.strokeStyle = 'rgba(60,45,38,.55)'; ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(ex - w, ey - 2.5); ctx.quadraticCurveTo(ex, ey - 3.2, ex + w, ey - 2.6); ctx.stroke();
+    ctx.fillStyle = '#1b1310'; ell(ex, ey, w, w * 0.86);
+    ctx.strokeStyle = '#2a1d18'; ctx.lineWidth = 0.45;
+    ctx.beginPath(); ctx.moveTo(ex - w - 0.5, ey - 0.15); ctx.quadraticCurveTo(ex, ey - w * 0.86 - 0.8, ex + w + 0.5, ey - 0.15); ctx.stroke();
+    ctx.fillStyle = '#fff'; ell(ex + w * 0.3, ey - w * 0.3, w * 0.27, w * 0.27);
   };
-  eye(3.5, -29.9, 1.75); eye(8.8, -29.9, 1.6);
+  ctx.lineCap = 'round';
+  eye(3.5, -29.8, 1.55); eye(8.8, -29.8, 1.4);
 
-  // 볼, 코, 씩 웃는 작은 입
-  ctx.fillStyle = 'rgba(255,120,120,.4)'; ell(7.9, -26.5, 1.5, 1.1); ell(0.4, -26.5, 2, 1.25);
-  ctx.fillStyle = '#e6b091'; ell(6.7, -27.6, 0.8, 0.55);
-  ctx.strokeStyle = '#c4605f'; ctx.lineWidth = 0.75; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(4.9, -24.9); ctx.quadraticCurveTo(6.5, -24, 8.2, -25.2); ctx.stroke();
+  // 볼, 작은 코, 살짝 다문 입
+  ctx.fillStyle = 'rgba(255,125,125,.26)'; ell(7.9, -26.6, 1.5, 1.05); ell(0.4, -26.5, 1.9, 1.15);
+  ctx.fillStyle = '#e6b091'; ell(6.6, -27.3, 0.75, 0.5);
+  ctx.fillStyle = 'rgba(232,130,130,.55)'; ell(6.5, -24.3, 1.15, 0.5);
+  ctx.strokeStyle = '#c4605f'; ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.moveTo(5.1, -24.75); ctx.quadraticCurveTo(6.5, -24.1, 7.9, -24.8); ctx.stroke();
   ctx.restore();
 }
