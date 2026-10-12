@@ -22,7 +22,7 @@
   const ctx = canvas.getContext('2d');
   const W = 360, H = 640;
   const ROAD_L = 45, ROAD_R = 315, LANES = [90, 180, 270];
-  const PLAYER_Y = 530;
+  const PLAYER_Y = 530, MAX_LIVES = 5;
   ctx.scale(canvas.width / W, canvas.height / H);
 
   // ---------- 소리 ----------
@@ -53,14 +53,14 @@
 
   // ---------- 상태 ----------
   let state = 'title', frame = 0, stateTimer = 0;
-  let dist = 0, stars = 0, lives = 3, speed = 4, nextSpawn = 0, scroll = 0;
+  let dist = 0, stars = 0, lives = MAX_LIVES, speed = 2.6, nextSpawn = 0, scroll = 0;
   let objects = [], popups = [];
   let best = +(localStorage.getItem('hajinCarBest') || 0);
   const player = { lane: 1, x: LANES[1], invuln: 0, shield: 0, tilt: 0 };
   const score = () => Math.floor(dist / 10) + stars * 10;
 
   function newGame() {
-    dist = 0; stars = 0; lives = 3; speed = 4; nextSpawn = 200; objects = []; popups = [];
+    dist = 0; stars = 0; lives = MAX_LIVES; speed = 2.6; nextSpawn = 260; objects = []; popups = [];
     Object.assign(player, { lane: 1, x: LANES[1], invuln: 0, shield: 0, tilt: 0 });
     state = 'play';
   }
@@ -95,13 +95,13 @@
   function spawnRow() {
     const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
     // 한 줄에 최대 2개만 막아서 항상 지나갈 길이 하나는 남는다
-    const n = dist > 1500 && Math.random() < 0.45 ? 2 : 1;
+    const n = dist > 4000 && Math.random() < 0.25 ? 2 : 1;
     for (let i = 0; i < n; i++) {
       objects.push({ kind: 'obs', type: OBSTACLES[Math.floor(Math.random() * OBSTACLES.length)], x: LANES[lanes[i]], y: -60, color: ['#3b82f6', '#22a35a', '#f59e0b', '#a855f7'][Math.floor(Math.random() * 4)] });
     }
-    if (Math.random() < 0.65) {
+    if (Math.random() < 0.8) {
       const r = Math.random();
-      const type = r < 0.1 && lives < 3 ? 'heart' : r < 0.22 ? 'shield' : 'star';
+      const type = r < 0.15 && lives < MAX_LIVES ? 'heart' : r < 0.3 ? 'shield' : 'star';
       objects.push({ kind: 'item', type, x: LANES[lanes[2]], y: -60 });
     }
   }
@@ -110,7 +110,7 @@
     frame++;
     if (state !== 'play') { stateTimer++; scroll += 1.5; return; }
 
-    speed = 4 + Math.min(dist / 2500, 6);
+    speed = 2.6 + Math.min(dist / 6000, 2.4);
     dist += speed; scroll += speed;
     const p = player;
     p.x += (LANES[p.lane] - p.x) * 0.25;
@@ -119,7 +119,7 @@
     if (p.shield > 0) p.shield--;
 
     nextSpawn -= speed;
-    if (nextSpawn <= 0) { spawnRow(); nextSpawn = Math.max(190, 300 - dist / 150) + Math.random() * 70; }
+    if (nextSpawn <= 0) { spawnRow(); nextSpawn = Math.max(260, 360 - dist / 300) + Math.random() * 80; }
 
     for (const o of objects) {
       o.y += speed;
@@ -127,12 +127,12 @@
       if (o.kind === 'item') {
         o.dead = true;
         if (o.type === 'star') { stars++; sfx.star(); popups.push({ x: o.x, y: o.y, text: '+10', life: 40 }); }
-        else if (o.type === 'heart') { lives = Math.min(3, lives + 1); sfx.power(); popups.push({ x: o.x, y: o.y, text: '❤️+1', life: 50 }); }
-        else { p.shield = 360; sfx.power(); popups.push({ x: o.x, y: o.y, text: '무적!', life: 50 }); }
+        else if (o.type === 'heart') { lives = Math.min(MAX_LIVES, lives + 1); sfx.power(); popups.push({ x: o.x, y: o.y, text: '❤️+1', life: 50 }); }
+        else { p.shield = 480; sfx.power(); popups.push({ x: o.x, y: o.y, text: '무적!', life: 50 }); }
       } else if (p.shield > 0) {
         o.dead = true; stars++; sfx.smash(); popups.push({ x: o.x, y: o.y, text: '쾅! +10', life: 40 });
       } else if (p.invuln === 0) {
-        o.dead = true; lives--; p.invuln = 100; sfx.crash();
+        o.dead = true; lives--; p.invuln = 150; sfx.crash();
         if (lives <= 0) {
           state = 'over'; stateTimer = 0; sfx.over();
           if (score() > best) { best = score(); localStorage.setItem('hajinCarBest', best); }
@@ -277,7 +277,7 @@
 
     text('점수 ' + score(), W / 2, 34, 22);
     text('⭐ ' + stars, W / 2, 58, 15, '#ffe36b');
-    text('❤️'.repeat(Math.max(0, lives)), W - 12, 34, 18, '#fff', 'right');
+    text('❤️'.repeat(Math.max(0, lives)), W - 8, 32, 14, '#fff', 'right');
 
     if (state === 'over') {
       ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);

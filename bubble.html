@@ -116,7 +116,7 @@
   const FRUITS = [['🍒', 500], ['🍊', 700], ['🍉', 1000], ['🍰', 2000]];
 
   let grid, enemies, bubbles, fruits, popups;
-  let state = 'title', stage = 1, score = 0, lives = 3, frame = 0, stateTimer = 0;
+  let state = 'title', stage = 1, score = 0, lives = 5, frame = 0, stateTimer = 0;
   let best = +(localStorage.getItem('hajinBubbleBest') || 0);
   const player = { x: 0, y: 0, w: 22, h: 34, vx: 0, vy: 0, face: 1, onGround: false, invuln: 0, cool: 0 };
 
@@ -125,8 +125,8 @@
   function buildStage() {
     grid = Array.from({ length: ROWS }, (_, r) => Array.from({ length: COLS }, (_, c) => (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1) ? 1 : 0));
     LAYOUTS[(stage - 1) % LAYOUTS.length].forEach(([r, a, b]) => { for (let c = a; c <= b; c++) grid[r][c] = 1; });
-    const n = Math.min(3 + Math.floor((stage + 1) / 2), 7);
-    const sp = 1 + Math.min(stage - 1, 8) * 0.08;
+    const n = Math.min(2 + Math.floor(stage / 2), 5);
+    const sp = 0.65 + Math.min(stage - 1, 8) * 0.05;
     enemies = [];
     for (let i = 0; i < n; i++) {
       enemies.push({ x: 90 + (620 / (n - 1)) * i, y: T + 4 + (i % 2) * 96, w: 26, h: 24, vx: (i % 2 ? 1 : -1) * sp, vy: 0, sp, angry: false, onGround: false });
@@ -135,9 +135,9 @@
     placePlayer();
   }
   function placePlayer() {
-    Object.assign(player, { x: 2 * T, y: 13 * T - 34, vx: 0, vy: 0, face: 1, invuln: 150, cool: 0 });
+    Object.assign(player, { x: 2 * T, y: 13 * T - 34, vx: 0, vy: 0, face: 1, invuln: 200, cool: 0 });
   }
-  function newGame() { score = 0; lives = 3; stage = 1; buildStage(); state = 'play'; }
+  function newGame() { score = 0; lives = 5; stage = 1; buildStage(); state = 'play'; }
 
   // 좌우 벽 + 위에서만 밟히는 발판
   function moveEntity(e) {
@@ -213,11 +213,11 @@
 
     // --- 적 ---
     for (const en of enemies) {
-      const sp = en.sp * (en.angry ? 1.7 : 1);
+      const sp = en.sp * (en.angry ? 1.3 : 1);
       en.vx = Math.sign(en.vx || 1) * sp;
       if (en.onGround) {
         const above = p.y + p.h < en.y - 8;
-        if (Math.random() < (above ? 0.02 : 0.006)) en.vy = -10.6;
+        if (Math.random() < (above ? 0.01 : 0.004)) en.vy = -10.6;
         else if (Math.random() < 0.004) en.vx = -en.vx;
       }
       moveEntity(en);
@@ -246,7 +246,7 @@
         b.x += Math.sin(frame * 0.05 + b.y * 0.05) * 0.3;
         b.x = Math.max(T + 14, Math.min(W - T - 14, b.x));
         if (state === 'play' && overlap(bubbleBox(b), p)) popBubble(b);
-        else if (b.enemy && b.t > 520) {
+        else if (b.enemy && b.t > 900) {
           // 너무 오래 두면 화가 나서 탈출!
           const en = b.enemy; en.x = b.x - en.w / 2; en.y = b.y - en.h / 2; en.vy = 0; en.angry = true;
           enemies.push(en); b.enemy = null; b.dead = true;
@@ -299,7 +299,7 @@
 
   function drawBubble(b) {
     const r = b.t <= 18 && !b.enemy ? 8 + b.t * 0.35 : 15 + Math.sin(frame * 0.12 + b.x) * 0.8;
-    const warn = b.enemy && b.t > 400 && Math.floor(frame / 8) % 2;
+    const warn = b.enemy && b.t > 720 && Math.floor(frame / 8) % 2;
     if (b.enemy) drawEnemy(b.x, b.y + 11, 1, b.enemy.angry, frame * 0.3);
     ctx.fillStyle = warn ? 'rgba(255,120,120,.35)' : 'rgba(140,220,255,.35)'; ell(b.x, b.y, r, r);
     ctx.strokeStyle = warn ? '#e8483f' : '#3fa0e0'; ctx.lineWidth = 2;

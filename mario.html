@@ -129,7 +129,7 @@
     };
 
     row(0, COLS - 1, 12, 'G'); row(0, COLS - 1, 13, 'G');
-    [[28, 2], [52, 3], [80, 2], [108, 3], [140, 2], [165, 3]].forEach(([s, n]) => {
+    [[28, 2], [52, 2], [80, 2], [108, 2], [140, 2], [165, 2]].forEach(([s, n]) => {
       for (let c = s; c < s + n; c++) { set(c, 12, ' '); set(c, 13, ' '); }
       row(s, s + n - 1, 7, 'o');
     });
@@ -150,21 +150,21 @@
     stairs(180, 6, 1);
     row(188, 192, 8, 'o');
 
-    enemies = [22, 31, 38, 46, 60, 68, 70, 84, 95, 101, 113, 117, 126, 127, 144, 150, 154, 161, 172, 175]
-      .map(c => ({ x: c * T, y: 12 * T - 24, w: 26, h: 24, vx: -1, vy: 0, alive: true, squash: 0, active: false }));
+    enemies = [22, 38, 60, 70, 95, 117, 127, 150, 161, 175]
+      .map(c => ({ x: c * T, y: 12 * T - 24, w: 26, h: 24, vx: -0.6, vy: 0, alive: true, squash: 0, active: false }));
     items = []; particles = []; bumps = {};
   }
 
   // ---------- 상태 ----------
-  let state = 'title', score = 0, coins = 0, lives = 3, time = 300, frame = 0, camX = 0, stateTimer = 0;
+  let state = 'title', score = 0, coins = 0, lives = 5, time = 500, frame = 0, camX = 0, stateTimer = 0;
   const player = { x: 0, y: 0, w: 22, h: SMALL_H, vx: 0, vy: 0, face: 1, onGround: false, big: false, invuln: 0 };
 
   function resetLevel() {
     buildLevel();
     Object.assign(player, { x: 3 * T, y: 12 * T - SMALL_H, h: SMALL_H, vx: 0, vy: 0, face: 1, onGround: false, big: false, invuln: 0 });
-    time = 300; camX = 0;
+    time = 500; camX = 0;
   }
-  function newGame() { score = 0; coins = 0; lives = 3; resetLevel(); state = 'play'; }
+  function newGame() { score = 0; coins = 0; lives = 5; resetLevel(); state = 'play'; }
 
   // ---------- 물리 ----------
   function moveEntity(e) {
@@ -291,7 +291,7 @@
       if (en.hitWall) en.vx = -en.vx;
       if (en.y > H + 60) { en.alive = false; continue; }
       if (state === 'play' && overlap(p, en)) {
-        if (p.vy > 0 && p.y + p.h - en.y < 16) {
+        if (p.vy > 0 && p.y + p.h - en.y < 20) {
           en.alive = false; en.squash = 30; score += 200;
           p.vy = keys.jump ? -10 : -6.5; sfx.stomp();
         } else hurtPlayer();
