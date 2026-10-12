@@ -2,21 +2,29 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>하진 버블버블</title>
 <style>
   html, body { margin: 0; height: 100%; background: #1b1f2a; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
   #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
-  canvas { width: min(100vw, calc(100vh * 800 / 448)); height: auto; aspect-ratio: 800 / 448; background: #fff3d6; display: block; }
-  .pad { position: fixed; bottom: 18px; display: none; gap: 14px; z-index: 5; }
-  .pad.left { left: 18px; }
-  .pad.right { right: 18px; }
+  canvas { width: min(100vw, calc(100vh * 800 / 448)); width: min(100vw, calc(100dvh * 800 / 448)); height: auto; aspect-ratio: 800 / 448; background: #fff3d6; display: block; }
+  .pad { position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); display: none; gap: 14px; z-index: 5; }
+  .pad.left { left: max(18px, env(safe-area-inset-left)); }
+  .pad.right { right: max(18px, env(safe-area-inset-right)); }
   .pad button {
-    width: 72px; height: 72px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7);
+    width: 76px; height: 76px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7); padding: 0;
     background: rgba(0,0,0,.35); color: #fff; font-size: 22px; font-weight: bold; touch-action: none;
+    -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
   }
-  .pad button.on { background: rgba(255,255,255,.35); }
+  .pad button.on { background: rgba(255,255,255,.4); transform: scale(.94); }
   @media (pointer: coarse) { .pad { display: flex; } }
+  body.touch .pad { display: flex; }
+  /* 세로 화면: 게임은 위쪽, 버튼은 아래 빈 공간에 크게 */
+  @media (orientation: portrait) {
+    #wrap { align-items: flex-start; padding-top: 9vh; }
+    .pad { bottom: 16vh; }
+    .pad button { width: 21vw; height: 21vw; max-width: 104px; max-height: 104px; font-size: 24px; }
+  }
   .home { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 6px 14px; border-radius: 16px; background: rgba(0,0,0,.4); color: #fff; font: bold 13px sans-serif; text-decoration: none; }
 </style>
 </head>
@@ -33,6 +41,7 @@
 </div>
 
 <script src="kid.js"></script>
+<script src="touch.js"></script>
 <script>
 (() => {
   const canvas = document.getElementById('game');
@@ -64,16 +73,8 @@
     const k = KEYMAP[e.code];
     if (k) { keys[k] = false; e.preventDefault(); }
   });
-  document.querySelectorAll('.pad button').forEach(b => {
-    const k = b.dataset.key;
-    const down = e => { e.preventDefault(); initAudio(); press(k); b.classList.add('on'); };
-    const up = e => { e.preventDefault(); keys[k] = false; b.classList.remove('on'); };
-    b.addEventListener('pointerdown', down);
-    b.addEventListener('pointerup', up);
-    b.addEventListener('pointercancel', up);
-    b.addEventListener('pointerleave', up);
-  });
-  canvas.addEventListener('pointerdown', () => { initAudio(); startPressed = true; });
+  setupTouchPad(k => { initAudio(); press(k); }, k => { keys[k] = false; });
+  addEventListener('pointerdown', () => { initAudio(); startPressed = true; });
 
   // ---------- 소리 ----------
   let actx = null;
