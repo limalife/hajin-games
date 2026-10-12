@@ -37,6 +37,7 @@
   .choice { padding: 18px 4px; font-size: clamp(30px, 9vw, 42px); }
   .choice.ok { background: #58c452; color: #fff; }
   .choice.no { background: #ff8a80; color: #fff; }
+  .choice:disabled { opacity: .55; transform: none; box-shadow: 0 6px 0 #23304a; cursor: default; }
   #typed { min-width: 150px; padding: 4px 18px; font-size: clamp(38px, 11vw, 52px); font-weight: 900; text-align: center;
     background: #fff; border: 4px solid #23304a; border-radius: 16px; }
   #typed.ok { background: #58c452; color: #fff; }
@@ -103,10 +104,10 @@
 <script src="kid.js"></script>
 <script>
 (() => {
-  const TOTAL = 10;
+  const TOTAL = 10, MAX_TRIES = 5;
   const $ = id => document.getElementById(id);
   const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-  let op = 'add', level = 'easy', mode = 'choice', typed = '', index = 0, score = 0, streak = 0, answer = 0, locked = false;
+  let op = 'add', level = 'easy', mode = 'choice', typed = '', index = 0, score = 0, streak = 0, answer = 0, tries = 0, locked = false;
   let mood = 'idle', moodT = 0, frame = 0;
 
   // ---------- 소리 ----------
@@ -172,7 +173,7 @@
   function next() {
     if (index >= TOTAL) return finish();
     const p = makeProblem();
-    answer = p.ans; locked = false;
+    answer = p.ans; tries = 0; locked = false;
     $('question').textContent = p.text + ' = ?';
     $('count').textContent = `${index + 1} / ${TOTAL}`;
     $('score').textContent = '⭐ ' + score;
@@ -193,19 +194,31 @@
   }
   function pick(btn, value) {
     if (locked) return;
-    locked = true; index++;
     const right = value === answer;
+    moodT = 0;
+    if (!right && ++tries < MAX_TRIES) {
+      // 틀려도 정답은 알려 주지 않고 다시 풀 기회를 준다
+      streak = 0; sfx.no(); mood = 'sad';
+      $('streak').textContent = '';
+      $('msg').textContent = `다시 생각해 봐요! (남은 기회 ${MAX_TRIES - tries}번)`;
+      if (btn) { btn.classList.add('no'); btn.disabled = true; return; }
+      locked = true; $('typed').classList.add('no');
+      const q = index;
+      setTimeout(() => { if (q !== index) return; typed = ''; $('typed').className = ''; showTyped(); locked = false; }, 700);
+      return;
+    }
+    locked = true; index++;
     if (right) {
       score++; streak++; (btn || $('typed')).classList.add('ok'); sfx.ok();
       $('msg').textContent = ['정답! 👍', '최고야! 🎉', '멋져요! ✨', '척척박사! 🤓'][rand(0, 3)];
       mood = 'happy';
     } else {
+      // 기회를 모두 쓴 뒤에만 정답을 보여 준다
       streak = 0; (btn || $('typed')).classList.add('no'); sfx.no();
       [...$('choices').children].forEach(b => { if (+b.textContent === answer) b.classList.add('ok'); });
       $('msg').textContent = `아쉬워요! 정답은 ${answer}`;
       mood = 'sad';
     }
-    moodT = 0;
     $('question').textContent = $('question').textContent.replace('?', answer);
     $('score').textContent = '⭐ ' + score;
     $('prog').style.width = (index / TOTAL * 100) + '%';
