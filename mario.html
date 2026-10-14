@@ -166,6 +166,18 @@
   }
   function newGame() { score = 0; coins = 0; lives = 5; resetLevel(); state = 'play'; }
 
+  // 죽은 자리 근처에서 다시 시작: 맵·적·동전은 그대로 두고, 죽은 곳에서 뒤쪽으로 가장 가까운 안전한 땅을 찾는다
+  let deathX = 0;
+  function respawn() {
+    const free = c => [9, 10, 11].every(r => !isSolid(c, r));
+    let c = Math.min(GOAL_COL - 3, Math.floor(deathX / T));
+    while (c > 2 && !(tile(c, 12) === 'G' && free(c) && free(c + 1))) c--;
+    // 다시 나타나는 자리 바로 옆의 적은 치워 준다
+    enemies.forEach(en => { if (en.alive && Math.abs(en.x - c * T) < 5 * T) { en.alive = false; en.squash = 0; } });
+    Object.assign(player, { x: c * T + 5, y: 12 * T - SMALL_H, h: SMALL_H, vx: 0, vy: 0, face: 1, onGround: false, big: false, invuln: 150 });
+    time = Math.max(time, 200);
+  }
+
   // ---------- 물리 ----------
   function moveEntity(e) {
     e.hitWall = false; e.headHit = null;
@@ -234,6 +246,7 @@
   }
   function killPlayer() {
     if (state !== 'play') return;
+    deathX = player.x + player.w / 2;
     state = 'dying'; stateTimer = 130; player.vy = -10; player.vx = 0; sfx.die();
   }
 
@@ -251,7 +264,7 @@
       player.vy = Math.min(player.vy + GRAVITY, MAX_FALL); player.y += player.vy;
       if (--stateTimer <= 0) {
         lives--;
-        if (lives <= 0) { state = 'over'; stateTimer = 0; } else { resetLevel(); state = 'play'; }
+        if (lives <= 0) { state = 'over'; stateTimer = 0; } else { respawn(); state = 'play'; }
       }
       jumpPressed = false;
       return;
